@@ -87,9 +87,9 @@ public class ReferenceResourceImpl implements ReferenceResource {
     			return Response.status(Status.NOT_FOUND)
     					.entity(new ErrorBuilder().status(Status.NOT_FOUND).title("Invalid reference table id").append("No ref table match found for AD_Reference_ID: ").append(refID).build().toString())
     					.build();
-
+    		String whereClause = Env.parseContext(Env.getCtx(), 0, refTable.getWhereClause(), false, true);
     		MTable table = new MTable(Env.getCtx(), refTable.getAD_Table_ID(), null);
-    		Query query = new Query(Env.getCtx(), table, refTable.getWhereClause(), null);
+    		Query query = new Query(Env.getCtx(), table, whereClause, null);
     		List<PO> list = query
     				.setApplyAccessFilter(true, false)
     				.setOnlyActiveRecords(true)
