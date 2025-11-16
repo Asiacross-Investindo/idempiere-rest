@@ -50,6 +50,7 @@ import org.adempiere.exceptions.AdempiereException;
 import org.compiere.model.MAttachment;
 import org.compiere.model.MAttachmentEntry;
 import org.compiere.model.MTable;
+import org.compiere.model.MUser;
 import org.compiere.model.MWindow;
 import org.compiere.model.PO;
 import org.compiere.model.Query;
@@ -99,9 +100,30 @@ public class ModelResourceImpl implements ModelResource {
 	 */
 	public ModelResourceImpl() {
 	}
+	
+	private boolean isAccessAllowed(String tableName) {
+		MUser user = MUser.get(Env.getCtx());
+		if (user.isAdministrator()) {
+			return true;
+		}
+		
+		boolean allow = false;
+		if (tableName.equalsIgnoreCase("API_Employee") || tableName.equalsIgnoreCase("API_Operator") ||
+			tableName.equalsIgnoreCase("API_WorkingHourMonthly") || tableName.equalsIgnoreCase("API_WorkingHourWeekly") ||
+			tableName.equalsIgnoreCase("AD_Attachment") || tableName.equalsIgnoreCase("HRIS_Message") || 
+			tableName.equalsIgnoreCase("HRIST_TimeOffDoc") || tableName.equalsIgnoreCase("HRIST_AttendanceDoc") || 
+			tableName.equalsIgnoreCase("HRIST_OvertimeDoc")) {
+			allow = true;
+		}
+		return allow;
+	}
 
 	@Override
 	public Response getPO(String tableName, String id, String details, String select, String showsql) {
+		if (!isAccessAllowed(tableName)) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
+		
 		return getPO(tableName, id, details, select, null, showsql);
 	}
 	
@@ -115,6 +137,10 @@ public class ModelResourceImpl implements ModelResource {
 	 * @return
 	 */
 	private Response getPO(String tableName, String id, String details, String multiProperty, String singleProperty, String showsql) {
+		if (!isAccessAllowed(tableName)) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
+		
 		try {
 			Query query = RestUtils.getQuery(tableName, id, true, false);
 			PO po = query.first();
@@ -169,6 +195,11 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response getModels(String filter) {
+		MUser user = MUser.get(Env.getCtx());
+		if (!user.isAdministrator()) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
+		
 		IQueryConverter converter = IQueryConverter.getQueryConverter("DEFAULT");
 		try {
 			ConvertedQuery convertedStatement = converter.convertStatement(MTable.Table_Name, filter);
@@ -208,6 +239,10 @@ public class ModelResourceImpl implements ModelResource {
 	@Override
 	public Response getPOs(String tableName, String details, String filter, String order, String select, int top, int skip,
 			String validationRuleID, String context, String showsql) {
+		if (!isAccessAllowed(tableName)) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
+		
 		try {
 			ModelHelper modelHelper = new ModelHelper(tableName, filter, order, top, skip, validationRuleID, context);
 			List<PO> list = modelHelper.getPOsFromRequest();
@@ -257,6 +292,10 @@ public class ModelResourceImpl implements ModelResource {
 	
 	@Override
 	public Response create(String tableName, String jsonText) {
+		if (!isAccessAllowed(tableName)) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
+		
 		Trx trx = Trx.get(Trx.createTrxName(), true);
 		try {
 			MTable table = RestUtils.getTableAndCheckAccess(tableName, true);
@@ -386,7 +425,10 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response update(String tableName, String id, String jsonText) {
-
+		if (!isAccessAllowed(tableName)) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
+		
 		POParser poParser = new POParser(tableName, id, true, true);
 		if (!poParser.isValidPO()) {
 			return poParser.getResponseError();
@@ -508,6 +550,9 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response delete(String tableName, String id) {
+		if (!isAccessAllowed(tableName)) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
 		
 		POParser poParser = new POParser(tableName, id, true, true);
 		if (poParser.isValidPO()) {
@@ -531,6 +576,10 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response getAttachments(String tableName, String id) {
+		if (!isAccessAllowed(tableName)) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
+		
 		JsonArray array = new JsonArray();
 		POParser poParser = new POParser(tableName, id, true, false);
 		if (poParser.isValidPO()) {
@@ -555,6 +604,9 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response getAttachmentsAsZip(String tableName, String id) {
+		if (!isAccessAllowed(tableName)) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
 		
 		POParser poParser = new POParser(tableName, id, true, false);
 		if (poParser.isValidPO()) {
@@ -575,6 +627,10 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response createAttachmentsFromZip(String tableName, String id, String jsonText) {
+		if (!isAccessAllowed(tableName)) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
+		
 		Gson gson = new GsonBuilder().create();
 		JsonObject jsonObject = gson.fromJson(jsonText, JsonObject.class);
 		
@@ -639,7 +695,10 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response getAttachmentEntry(String tableName, String id, String fileName) {
-	
+		if (!isAccessAllowed(tableName)) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
+		
 		POParser poParser = new POParser(tableName, id, true, false);
 		if (poParser.isValidPO()) {
 			PO po = poParser.getPO();
@@ -668,6 +727,10 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response addAttachmentEntry(String tableName, String id, String jsonText) {
+		if (!isAccessAllowed(tableName)) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
+		
 		Gson gson = new GsonBuilder().create();
 		JsonObject jsonObject = gson.fromJson(jsonText, JsonObject.class);
 		
@@ -729,6 +792,9 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response deleteAttachments(String tableName, String id) {
+		if (!isAccessAllowed(tableName)) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
 		
 		POParser poParser = new POParser(tableName, id, true, false);
 		if (poParser.isValidPO()) {
@@ -753,6 +819,9 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response deleteAttachmentEntry(String tableName, String id, String fileName) {
+		if (!isAccessAllowed(tableName)) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
 		
 		POParser poParser = new POParser(tableName, id, true, false);
 		if (poParser.isValidPO()) {
@@ -788,6 +857,9 @@ public class ModelResourceImpl implements ModelResource {
 	
 	@Override
 	public Response printModelRecord(String tableName, String id, String reportType) {
+		if (!isAccessAllowed(tableName)) {
+			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
+		}
 		
 		POParser poParser = new POParser(tableName, id, true, true);
 		if (poParser.isValidPO()) {
