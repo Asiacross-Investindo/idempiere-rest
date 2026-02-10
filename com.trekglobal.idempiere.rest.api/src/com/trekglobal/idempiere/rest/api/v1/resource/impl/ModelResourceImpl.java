@@ -101,7 +101,7 @@ public class ModelResourceImpl implements ModelResource {
 	public ModelResourceImpl() {
 	}
 	
-	private boolean isAccessAllowed(String tableName) {
+	private boolean isAccessAllowed(String tableName, boolean write) {
 		MUser user = MUser.get(Env.getCtx());
 		if (user.isAdministrator()) {
 			return true;
@@ -115,12 +115,16 @@ public class ModelResourceImpl implements ModelResource {
 			tableName.equalsIgnoreCase("HRIST_OvertimeDoc")) {
 			allow = true;
 		}
+		
+		if (write && (tableName.equalsIgnoreCase("HRIS_Message") || tableName.equalsIgnoreCase("AD_Attachment"))) {
+			allow = false;
+		}
 		return allow;
 	}
 
 	@Override
 	public Response getPO(String tableName, String id, String details, String select, String showsql) {
-		if (!isAccessAllowed(tableName)) {
+		if (!isAccessAllowed(tableName, false)) {
 			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
 		}
 		
@@ -137,7 +141,7 @@ public class ModelResourceImpl implements ModelResource {
 	 * @return
 	 */
 	private Response getPO(String tableName, String id, String details, String multiProperty, String singleProperty, String showsql) {
-		if (!isAccessAllowed(tableName)) {
+		if (!isAccessAllowed(tableName, false)) {
 			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
 		}
 		
@@ -239,7 +243,7 @@ public class ModelResourceImpl implements ModelResource {
 	@Override
 	public Response getPOs(String tableName, String details, String filter, String order, String select, int top, int skip,
 			String validationRuleID, String context, String showsql) {
-		if (!isAccessAllowed(tableName)) {
+		if (!isAccessAllowed(tableName, false)) {
 			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
 		}
 		
@@ -292,7 +296,7 @@ public class ModelResourceImpl implements ModelResource {
 	
 	@Override
 	public Response create(String tableName, String jsonText) {
-		if (!isAccessAllowed(tableName)) {
+		if (!isAccessAllowed(tableName, false)) {
 			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
 		}
 		
@@ -425,7 +429,7 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response update(String tableName, String id, String jsonText) {
-		if (!isAccessAllowed(tableName)) {
+		if (!isAccessAllowed(tableName, true)) {
 			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
 		}
 		
@@ -550,7 +554,7 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response delete(String tableName, String id) {
-		if (!isAccessAllowed(tableName)) {
+		if (!isAccessAllowed(tableName, true)) {
 			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
 		}
 		
@@ -576,7 +580,7 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response getAttachments(String tableName, String id) {
-		if (!isAccessAllowed(tableName)) {
+		if (!isAccessAllowed(tableName,false)) {
 			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
 		}
 		
@@ -604,7 +608,7 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response getAttachmentsAsZip(String tableName, String id) {
-		if (!isAccessAllowed(tableName)) {
+		if (!isAccessAllowed(tableName, false)) {
 			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
 		}
 		
@@ -627,7 +631,7 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response createAttachmentsFromZip(String tableName, String id, String jsonText) {
-		if (!isAccessAllowed(tableName)) {
+		if (!isAccessAllowed(tableName, true)) {
 			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
 		}
 		
@@ -695,7 +699,7 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response getAttachmentEntry(String tableName, String id, String fileName) {
-		if (!isAccessAllowed(tableName)) {
+		if (!isAccessAllowed(tableName, false)) {
 			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
 		}
 		
@@ -727,7 +731,7 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response addAttachmentEntry(String tableName, String id, String jsonText) {
-		if (!isAccessAllowed(tableName)) {
+		if (!isAccessAllowed(tableName, false)) {
 			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
 		}
 		
@@ -792,7 +796,7 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response deleteAttachments(String tableName, String id) {
-		if (!isAccessAllowed(tableName)) {
+		if (!isAccessAllowed(tableName, true)) {
 			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
 		}
 		
@@ -819,7 +823,7 @@ public class ModelResourceImpl implements ModelResource {
 
 	@Override
 	public Response deleteAttachmentEntry(String tableName, String id, String fileName) {
-		if (!isAccessAllowed(tableName)) {
+		if (!isAccessAllowed(tableName, true)) {
 			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
 		}
 		
@@ -857,7 +861,7 @@ public class ModelResourceImpl implements ModelResource {
 	
 	@Override
 	public Response printModelRecord(String tableName, String id, String reportType) {
-		if (!isAccessAllowed(tableName)) {
+		if (!isAccessAllowed(tableName, false)) {
 			return ResponseUtils.getResponseError(Status.FORBIDDEN, "Access Forbidden", "Role does not have access","");
 		}
 		
