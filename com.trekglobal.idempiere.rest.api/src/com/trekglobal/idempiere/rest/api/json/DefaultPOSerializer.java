@@ -27,12 +27,13 @@ package com.trekglobal.idempiere.rest.api.json;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
-import org.adempiere.exceptions.AdempiereException;
-import org.compiere.model.GridField;
-import org.compiere.model.GridFieldVO;
+import javax.ws.rs.core.Response.Status;
+
 import org.compiere.model.MColumn;
 import org.compiere.model.MSysConfig;
 import org.compiere.model.MTable;
@@ -40,12 +41,15 @@ import org.compiere.model.PO;
 import org.compiere.model.POInfo;
 import org.compiere.util.DisplayType;
 import org.compiere.util.Env;
+import org.compiere.util.Msg;
 import org.compiere.util.Util;
 import org.osgi.service.component.annotations.Component;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.trekglobal.idempiere.rest.api.model.MRestView;
+import com.trekglobal.idempiere.rest.api.model.MRestViewColumn;
 
 /**
  * 
@@ -56,7 +60,7 @@ import com.google.gson.JsonObject;
 @Component(name = "com.trekglobal.idempiere.rest.api.json.DefaultPOSerializer", service = IPOSerializerFactory.class, 
 	property = {"service.ranking:Integer=0"}, immediate = true)
 public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory {
-
+	
 	/**
 	 * default constructor
 	 */
@@ -65,23 +69,42 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 
 	@Override
 	public JsonObject toJson(PO po, String[] includes, String[] excludes) {
+		return toJson(po, null, includes, excludes, null);
+	}
+
+	@Override
+	public JsonObject toJson(PO po, MRestView view, String[] includes, String[] excludes) {
+		return toJson(po, view, includes, excludes, null);
+	}
+
+	@Override
+	public JsonObject toJson(PO po, MRestView view, String[] includes, String[] excludes, String trxName) {
 		JsonObject json = new JsonObject();
-		String[] keyColumns = po.get_KeyColumns();
+		MTable table = MTable.get(po.get_Table_ID());
 		String keyColumn = null;
-		if (keyColumns != null && keyColumns.length == 1) {
-			json.addProperty("id", po.get_ID());
-			keyColumn = keyColumns[0];
-		}
 		String uidColumn = po.getUUIDColumnName();
+		if (table.isIDKeyTable()) {
+			//always include id and uid
+			String[] keyColumns = po.get_KeyColumns();
+			if (keyColumns != null && keyColumns.length == 1) {
+				json.addProperty("id", po.get_ID());
+				keyColumn = keyColumns[0];
+			}
+		} else {
+			keyColumn = uidColumn;
+		}
 		if (po.get_ColumnIndex(uidColumn) >= 0) {
 			String uid = po.get_ValueAsString(uidColumn);
 			if (!Util.isEmpty(uid, true)) {
 				json.addProperty("uid", uid);
 			}
 		}		
+		//loops through columns from view or PO definition
+		MRestViewColumn[] viewColumns = view != null ? view.getColumns() : null;
 		POInfo poInfo = POInfo.getPOInfo(Env.getCtx(), po.get_Table_ID());
-		for(int i=0;i < poInfo.getColumnCount(); i++) {
-			String columnName = poInfo.getColumnName(i);
+		int count = view != null ? viewColumns.length : poInfo.getColumnCount(); 
+		for(int i=0;i < count ; i++) {
+			String columnName = view != null ? MColumn.getColumnName(Env.getCtx(), viewColumns[i].getAD_Column_ID()) : poInfo.getColumnName(i);
 			if (keyColumn != null && keyColumn.equalsIgnoreCase(columnName))
 				continue;
 			if (uidColumn != null && uidColumn.equalsIgnoreCase(columnName))
@@ -90,67 +113,148 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 				continue;
 			if (exclude(columnName, excludes))
 				continue;
-			MColumn column = MColumn.get(Env.getCtx(), poInfo.getAD_Column_ID(columnName));
+			int columnId = view != null ? viewColumns[i].getAD_Column_ID() : poInfo.getAD_Column_ID(columnName); 
+			MColumn column = MColumn.get(Env.getCtx(), columnId);
 			if (column.isSecure() || column.isEncrypted())
 				continue;
 			if (!RestUtils.hasRoleColumnAccess(po.get_Table_ID(), column.getAD_Column_ID(), true))
 				continue;
+			//find view column (if using view)
+			MRestViewColumn viewColumn = null;
+			if (viewColumns != null) {
+				Optional<MRestViewColumn> optional = Arrays.stream(viewColumns).filter(e -> e.getAD_Column_ID() == column.getAD_Column_ID()).findFirst();
+				if (optional.isPresent())
+					viewColumn = optional.get();
+				else
+					continue;
+			}
 
 			Object value ;
 			if (column.isTranslated())
 				value = po.get_Translation(column.getColumnName());
 			else
-				value = po.get_Value(i);
+				value = po.get_Value(column.getColumnName());
 
 			if (value != null) {
-				String propertyName = MSysConfig.getBooleanValue("REST_COLUMNNAME_TOLOWERCASE", false) ? TypeConverterUtils.toPropertyName(columnName) : columnName;
-				Object jsonValue = TypeConverterUtils.toJsonValue(column, value);
-				if (jsonValue != null) {
+				//get property name from view definition or default conversion
+				String propertyName = viewColumn != null ? viewColumn.getName()
+						: MSysConfig.getBooleanValue("REST_COLUMNNAME_TOLOWERCASE", false) ? TypeConverterUtils.toPropertyName(columnName) : columnName;
+				Object jsonValue = TypeConverterUtils.toJsonValue(column, value, viewColumn != null && viewColumn.getREST_ReferenceView_ID() > 0
+						? MRestView.get(viewColumn.getREST_ReferenceView_ID()) : null, trxName);
+				if (jsonValue != null) {					
+					JsonObject target = json;
+					//rest view support json path mapping to nested json value object
+					String[] jsonPath = viewColumns != null ? propertyName.split("[.]") : null;
+					if (jsonPath != null && jsonPath.length > 1) {
+						for(int p = 0; p < jsonPath.length-1; p++) {
+							JsonElement tmp = target.get(jsonPath[p]);
+							if (tmp == null) {
+								tmp = new JsonObject();
+								target.add(jsonPath[p], tmp);
+								target = (JsonObject) tmp;
+							} else if (!tmp.isJsonObject()) {
+								target = null;
+								break;
+							} else {
+								target = tmp.getAsJsonObject();
+							}
+						}
+						if (target == null)
+							continue;
+						propertyName = jsonPath[jsonPath.length-1];
+					}
 					if (jsonValue instanceof Number)
-						json.addProperty(propertyName, (Number)jsonValue);
+						target.addProperty(propertyName, (Number)jsonValue);
 					else if (jsonValue instanceof Boolean)
-						json.addProperty(propertyName, (Boolean)jsonValue);
+						target.addProperty(propertyName, (Boolean)jsonValue);
 					else if (jsonValue instanceof String)
-						json.addProperty(propertyName, (String)jsonValue);
+						target.addProperty(propertyName, (String)jsonValue);
 					else if (jsonValue instanceof JsonElement)
-						json.add(propertyName, (JsonElement) jsonValue);
+						target.add(propertyName, (JsonElement) jsonValue);
 					else
-						json.addProperty(propertyName, jsonValue.toString());					
+						target.addProperty(propertyName, jsonValue.toString());					
 				}
 			}
 		}
-		if (!exclude("model-name", excludes))
+		if (!exclude("model-name", excludes)) {
 			json.addProperty("model-name", poInfo.getTableName().toLowerCase());
+			if (view != null) {
+				json.addProperty("view-name", view.getName());
+			}
+		}
 		return json;
 	}
 
 	@Override
 	public PO fromJson(JsonObject json, MTable table) {
-		PO po = table.getPO(0, null);
+		return fromJson(json, table, (MRestView)null, (String)null);
+	}
+
+	@Override
+	public PO fromJson(JsonObject json, MTable table, MRestView view) {
+		return fromJson(json, table, view, null);
+	}
+
+	@Override
+	public PO fromJson(JsonObject json, MTable table, MRestView view, String trxName) {
+		PO po = table.isUUIDKeyTable() ? table.getPOByUU(PO.UUID_NEW_RECORD, null) : table.getPO(0, null);
 		POInfo poInfo = POInfo.getPOInfo(Env.getCtx(), table.getAD_Table_ID());
-		validateJsonFields(json, po);
+		validateJsonFields(json, po, view);
 		Set<String> jsonFields = json.keySet();
-		for(int i = 0; i < poInfo.getColumnCount(); i++) {
-			String columnName = poInfo.getColumnName(i);
+		
+		//loops through columns from view or PO definition
+		MRestViewColumn[] viewColumns = view != null ? view.getColumns() : null;
+		int count = view != null ? viewColumns.length : poInfo.getColumnCount(); 
+		for(int i = 0; i < count; i++) {
+			MRestViewColumn viewColumn = viewColumns != null ? viewColumns[i] : null;
+			String columnName = viewColumn != null ? MColumn.getColumnName(Env.getCtx(), viewColumn.getAD_Column_ID()) : poInfo.getColumnName(i);
 			MColumn column = table.getColumn(columnName);
-			String propertyName = TypeConverterUtils.toPropertyName(columnName);
-			if (!jsonFields.contains(propertyName) && !jsonFields.contains(columnName)) {
-				setDefaultValue(po, column);
+			String propertyName = null;
+			if (viewColumns != null) {
+				propertyName = viewColumns[i].getName();
+			} else {
+				propertyName = TypeConverterUtils.toPropertyName(columnName);				
+			}
+			//rest view support json path mapping to nested json value object
+			String[] jsonPath = viewColumns != null ? propertyName.split("[.]") : null;
+			if (jsonPath != null && jsonPath.length > 1)
+				propertyName = jsonPath[0];
+			if (!jsonFields.contains(propertyName) && (viewColumns != null || !jsonFields.contains(columnName))) {
 				continue;
 			}
-
+			
 			JsonElement field = json.get(propertyName);
-			if (field == null)
+			if (field == null && viewColumns == null)
 				field = json.get(columnName);
 			if (field == null) {
-				setDefaultValue(po, column);
 				continue;
 			}
-			Object value = TypeConverterUtils.fromJsonValue(column, field);
+			//nested json value object
+			if (jsonPath != null && jsonPath.length > 1) {				
+				for(int p = 1; p < jsonPath.length && field != null; p++) {
+					if (!field.isJsonObject()) {
+						field = null;
+						break;
+					}
+					JsonObject valueObject = field.getAsJsonObject();
+					field = valueObject.get(jsonPath[p]);
+				}
+				if (field == null) {
+					continue;
+				}
+			}
+			Object value = TypeConverterUtils.fromJsonValue(column, field, viewColumn != null && viewColumn.getREST_ReferenceView_ID() > 0
+					? MRestView.get(viewColumn.getREST_ReferenceView_ID()) : null, trxName);
 			if (! isValueUpdated(po.get_ValueOfColumn(column.getAD_Column_ID()), value))
 				continue;
-			if (! isUpdatable(column, false, po))
+			if (viewColumn != null && !Util.isEmpty(viewColumn.getReadOnlyLogic(), true)) {
+				if (viewColumn.isReadOnly(json)) {
+					continue;
+				}
+			}
+			else if (! isUpdatable(column, false, po)) {
 				continue;
+			}
 			if (   value != null
 				&& value instanceof Integer) {
 				if (((Integer)value).intValue() < 0 && DisplayType.isID(column.getAD_Reference_ID())) {
@@ -168,25 +272,71 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 
 	@Override
 	public PO fromJson(JsonObject json, PO po) {
+		return fromJson(json, po, (MRestView)null, (String)null);
+	}
+
+	@Override
+	public PO fromJson(JsonObject json, PO po, MRestView view) {
+		return fromJson(json, po, view, null);
+	}
+
+	@Override
+	public PO fromJson(JsonObject json, PO po, MRestView view, String trxName) {
 		MTable table = MTable.get(Env.getCtx(), po.get_Table_ID());
 		POInfo poInfo = POInfo.getPOInfo(Env.getCtx(), table.getAD_Table_ID());
-		validateJsonFields(json, po);
+		validateJsonFields(json, po, view);
 		Set<String> jsonFields = json.keySet();
-		for(int i = 0; i < poInfo.getColumnCount(); i++) {
-			String columnName = poInfo.getColumnName(i);
+
+		//loops through columns from view or PO definition
+		MRestViewColumn[] viewColumns = view != null ? view.getColumns() : null;
+		int count = view != null ? viewColumns.length : poInfo.getColumnCount();
+		for(int i = 0; i < count; i++) {
+			String columnName = viewColumns != null ? MColumn.getColumnName(Env.getCtx(), viewColumns[i].getAD_Column_ID()) : poInfo.getColumnName(i);
 			MColumn column = table.getColumn(columnName);
-			String propertyName = TypeConverterUtils.toPropertyName(columnName);
-			if (!jsonFields.contains(propertyName) && !jsonFields.contains(columnName))
+			String propertyName = null;
+			if (viewColumns != null) {
+				propertyName = viewColumns[i].getName();
+			} else {
+				propertyName = TypeConverterUtils.toPropertyName(columnName);				
+			}
+			//rest view support json path mapping to nested json value object
+			String[] jsonPath = viewColumns != null ? propertyName.split("[.]") : null;
+			if (jsonPath != null && jsonPath.length > 1)
+				propertyName = jsonPath[0];
+			if (!jsonFields.contains(propertyName) && (viewColumns != null || !jsonFields.contains(columnName)))
 				continue;
 			JsonElement field = json.get(propertyName);
-			if (field == null)
+			if (field == null && viewColumns == null)
 				field = json.get(columnName);
 			if (field == null)
 				continue;
-			Object value = TypeConverterUtils.fromJsonValue(column, field);
+			//nested json value object
+			if (jsonPath != null && jsonPath.length > 1) {				
+				for(int p = 1; p < jsonPath.length && field != null; p++) {
+					if (!field.isJsonObject()) {
+						field = null;
+						break;
+					}
+					JsonObject valueObject = field.getAsJsonObject();
+					field = valueObject.get(jsonPath[p]);
+				}
+				if (field == null)
+					continue;
+			}
+			Object value = TypeConverterUtils.fromJsonValue(column, field, null, trxName);
 			if (! isValueUpdated(po.get_ValueOfColumn(column.getAD_Column_ID()), value))
 				continue;
-			if (! isUpdatable(column, true, po))
+			MRestViewColumn viewColumn = viewColumns != null ? viewColumns[i] : null;
+			if (viewColumn != null && !Util.isEmpty(viewColumn.getReadOnlyLogic(), true)) {
+				if (viewColumn.isReadOnly(json)) {
+					if (MSysConfig.getBooleanValue("REST_ERROR_ON_NON_UPDATABLE_COLUMN", true))
+						throw new IDempiereRestException(Msg.getMsg(Env.getCtx(), "ValidationError"),
+							"Cannot update column " + viewColumn.getName(), Status.BAD_REQUEST);
+					else
+						continue;
+				}
+			}
+			else if (! isUpdatable(column, true, po))
 				continue;
 			if (   value != null
 				&& value instanceof Integer) {
@@ -197,6 +347,7 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 						value = null;
 				}
 			}
+			
 			po.set_ValueOfColumn(column.getAD_Column_ID(), value);
 		}
 		
@@ -240,13 +391,15 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 
 		if (validateUpdateable && !column.isUpdateable()) {
 			if (errorOnNonUpdatable)
-				throw new AdempiereException("Cannot update column " + column.getColumnName());
+				throw new IDempiereRestException(Msg.getMsg(Env.getCtx(), "ValidationError"),
+							"Cannot update column " + column.getColumnName(), Status.BAD_REQUEST);
 			else
 				return false;
 		}
 		if (column.isVirtualColumn()) {
 			if (errorOnNonUpdatable)
-				throw new AdempiereException("Cannot update virtual column " + column.getColumnName());
+				throw new IDempiereRestException(Msg.getMsg(Env.getCtx(), "ValidationError"),
+							"Cannot update virtual column " + column.getColumnName(), Status.BAD_REQUEST);
 			else
 				return false;
 		}
@@ -254,7 +407,8 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 		if (! allowUpdateSecure) {
 			if (column.isSecure() || column.isEncrypted()) {
 				if (errorOnNonUpdatable)
-					throw new AdempiereException("Cannot update secure/encrypted column " + column.getColumnName());
+					throw new IDempiereRestException(Msg.getMsg(Env.getCtx(), "ValidationError"),
+							"Cannot update secure/encrypted column " + column.getColumnName(), Status.BAD_REQUEST);
 				else
 					return false;
 			}
@@ -262,7 +416,8 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 
 		if (!RestUtils.hasRoleColumnAccess(column.getAD_Table_ID(), column.getAD_Column_ID(), false)) {
 			if (errorOnNonUpdatable)
-				throw new AdempiereException("No access to update column " + column.getColumnName());
+				throw new IDempiereRestException(Msg.getMsg(Env.getCtx(), "ValidationError"),
+							"No access to update column " + column.getColumnName(), Status.BAD_REQUEST);
 			else
 				return false;
 		}
@@ -272,7 +427,8 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 				if (po.get_ValueAsBoolean("processed")) {
 					if (!column.isAlwaysUpdateable()) {
 						if (errorOnNonUpdatable)
-							throw new AdempiereException("Cannot update " + column.getColumnName() + " on processed record");
+							throw new IDempiereRestException(Msg.getMsg(Env.getCtx(), "ValidationError"),
+							"Cannot update " + column.getColumnName() + " on processed record", Status.BAD_REQUEST);
 						else
 							return false;
 					}
@@ -282,7 +438,8 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 				if (po.get_ValueAsBoolean("posted")) {
 					if (!column.isAlwaysUpdateable()) {
 						if (errorOnNonUpdatable)
-							throw new AdempiereException("Cannot update " + column.getColumnName() + " on posted record");
+							throw new IDempiereRestException(Msg.getMsg(Env.getCtx(), "ValidationError"),
+							"Cannot update " + column.getColumnName() + " on posted record", Status.BAD_REQUEST);
 						else
 							return false;
 					}
@@ -308,6 +465,16 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 	 * @param po
 	 */
 	public static void validateJsonFields(JsonObject json, PO po) {
+		validateJsonFields(json, po, null);
+	}
+	
+	/**
+	 * Validate that all json fields exist as columns and are properly named
+	 * @param json
+	 * @param po
+	 * @param view if not null, validate json fields against view definition
+	 */
+	public static void validateJsonFields(JsonObject json, PO po, MRestView view) {
 		boolean errorOnNonExisting = MSysConfig.getBooleanValue("REST_ERROR_ON_NON_EXISTING_COLUMN", true);
 		Set<String> jsonFields = json.keySet();
 		if (errorOnNonExisting) {
@@ -317,18 +484,71 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 				JsonElement jsonObj = json.get(jsonField);
 				if (jsonObj instanceof JsonArray)
 					continue;
-				int colIdx = po.get_ColumnIndex(jsonField);
+				String columnName = jsonField;
+				if (view != null) {
+					List<String> paths = new ArrayList<String>();
+					if (jsonObj.isJsonObject()) {						
+						flatten(view, jsonObj, jsonField, paths);
+					} else {
+						paths.add(jsonField);
+					}
+					for(String path : paths) {
+						columnName = view.toColumnName(path);
+						if (columnName == null) {
+							String errorPath = path;
+							Optional<MRestViewColumn> optional = Arrays.stream(view.getColumns()).filter(e -> e.getName().equalsIgnoreCase(path)).findFirst();
+							//handle .id and .identifier for lookup
+							if (!optional.isPresent() && (path.endsWith(".id") || path.endsWith(".identifier"))) {
+								String p = path.endsWith(".id") ? path.substring(0, path.length()-".id".length()) : path.substring(0, path.length()-".identifier".length());
+								optional = Arrays.stream(view.getColumns()).filter(e -> e.getName().equalsIgnoreCase(p)).findFirst();
+								if (optional.isPresent()) 
+									errorPath = p;
+							}
+							if (optional.isPresent()) {
+								StringBuilder error = new StringBuilder("Wrong name for column ")
+										.append(errorPath).append(", you must use ")
+										.append(optional.get().getName());
+								throw new IDempiereRestException(Msg.getMsg(Env.getCtx(), "ValidationError"),
+									error.toString(), Status.BAD_REQUEST);
+							} else {
+								throw new IDempiereRestException(Msg.getMsg(Env.getCtx(), "ValidationError"),
+									"Column " + errorPath + " does not exist", Status.BAD_REQUEST);
+							}
+						}
+						int colIdx = po.get_ColumnIndex(columnName);
+						if (colIdx < 0)
+							throw new IDempiereRestException(Msg.getMsg(Env.getCtx(), "ValidationError"),
+									"Column " + jsonField + " does not exist", Status.BAD_REQUEST);
+					}					
+					continue;
+				}
+				int colIdx = po.get_ColumnIndex(columnName);
 				if (colIdx < 0)
-					throw new AdempiereException("Column " + jsonField + " does not exist");
-				String columnName = po.get_ColumnName(colIdx);
+					throw new IDempiereRestException(Msg.getMsg(Env.getCtx(), "ValidationError"),
+							"Column " + jsonField + " does not exist", Status.BAD_REQUEST);
+				columnName = po.get_ColumnName(colIdx);
+				
 				String propertyName = TypeConverterUtils.toPropertyName(columnName);
 				if (! jsonField.equals(propertyName) && !jsonField.equals(columnName))
-					throw new AdempiereException("Wrong name for column " + jsonField + ", you must use " + propertyName +
-							(propertyName.equals(columnName) ? "" : " or " + columnName));
+					throw new IDempiereRestException(Msg.getMsg(Env.getCtx(), "ValidationError"),
+							"Wrong name for column " + jsonField + ", you must use " + propertyName +
+							(propertyName.equals(columnName) ? "" : " or " + columnName), Status.BAD_REQUEST);
 			}
 		}
 	}
 
+	private static void flatten(MRestView view, JsonElement jsonElement, String currentPath, List<String> paths) {
+        if (jsonElement.isJsonPrimitive() || view.toColumnName(currentPath) != null) {
+            paths.add(currentPath);
+        } else if (jsonElement.isJsonObject()) {
+            JsonObject jsonObject = jsonElement.getAsJsonObject();
+            for (String key : jsonObject.keySet()) {
+                String newPath = currentPath.isEmpty() ? key : currentPath + "." + key;
+                flatten(view, jsonObject.get(key), newPath, paths);
+            }
+        }
+    }
+	
 	private boolean exclude(String columnName, String[] excludes) {
 		if (excludes == null || excludes.length == 0)
 			return false;
@@ -349,26 +569,13 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 		return false;
 	}
 	
-	private void setDefaultValue(PO po, MColumn column) {
-		if (!column.isVirtualColumn() && !Util.isEmpty(column.getDefaultValue(), true)) {
-			GridFieldVO vo = GridFieldVO.createParameter(Env.getCtx(), 0, 0, 0, column.getAD_Column_ID(), column.getColumnName(), column.getName(), 
-						DisplayType.isLookup(column.getAD_Reference_ID()) 
-						? (DisplayType.isText(column.getAD_Reference_ID()) || DisplayType.isList(column.getAD_Reference_ID()) ? DisplayType.String : DisplayType.ID) 
-						: column.getAD_Reference_ID(), 0, false, false, "");
-			vo.DefaultValue = column.getDefaultValue();
-			GridField gridField = new GridField(vo);
-			Object defaultValue = gridField.getDefault();
-			if (defaultValue != null) {
-				po.set_ValueOfColumn(column.getAD_Column_ID(), defaultValue);
-			}
-		}		
-	}
-
 	@Override
 	public IPOSerializer getPOSerializer(String tableName, Class<?> modelClass) {
 		if ("*".equals(tableName)) {
 			return this;
 		}
 		return null;
-	}
+	}	
 }
+
+

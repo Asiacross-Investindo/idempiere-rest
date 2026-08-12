@@ -31,40 +31,65 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 
 import javax.ws.rs.core.Response.Status;
 
 import org.compiere.model.MColumn;
+import org.compiere.model.MOrg;
 import org.compiere.model.MRole;
+import org.compiere.model.MSysConfig;
 import org.compiere.model.MTable;
+import org.compiere.model.MWarehouse;
 import org.compiere.model.PO;
 import org.compiere.model.Query;
+import org.compiere.util.CCache;
 import org.compiere.util.CLogger;
 import org.compiere.util.DB;
 import org.compiere.util.Env;
+import org.compiere.util.KeyNamePair;
 import org.compiere.util.Language;
+import org.compiere.util.Login;
 import org.compiere.util.Util;
+
+import com.trekglobal.idempiere.rest.api.model.MRestView;
 
 public class RestUtils {
 
 	private final static CLogger log = CLogger.getCLogger(RestUtils.class);
 	private final static String UUID_REGEX="[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
+	private final static String EXPORT_UU_LOOKUP_SYSCONFIG_NAME = "REST_TABLES_EXPORT_LOOKUP_UU";
 
+	private static final AtomicInteger windowNoAtomic = new AtomicInteger(1);
+	
 	/**
 	 * @param value
 	 * @return true if value is a UUID identifier
 	 */
-	private static boolean isUUID(String value) {
+	public static boolean isUUID(String value) {
 		return value == null ? false : value.matches(UUID_REGEX);
 	}
 	
 	public static Query getQuery(String tableName, String recordID, boolean fullyQualified, boolean RW) {
+		return getQuery(tableName, recordID, fullyQualified, RW, null);
+	}
+	
+	public static Query getQuery(String tableName, String recordID, boolean fullyQualified, boolean RW, String whereClause) {
 		boolean isUUID = isUUID(recordID);
 		
 		String keyColumn = getKeyColumn(tableName, isUUID);
 		
-		Query query = new Query(Env.getCtx(), tableName, keyColumn + "=?", null);
+		StringBuilder where = new StringBuilder(keyColumn).append("=?");
+		if (!Util.isEmpty(whereClause, true)) {
+			int atIdx = whereClause.indexOf("@");
+			if (atIdx >= 0 && whereClause.indexOf("@", atIdx+1) > atIdx) {
+				whereClause = Env.parseContext(Env.getCtx(), -1, whereClause, false);
+			}
+			where.append(" AND (").append(whereClause).append(")");
+		}
+		Query query = new Query(Env.getCtx(), tableName, where.toString(), null);
 		
 		if (fullyQualified || RW)
 			query.setApplyAccessFilter(fullyQualified, RW);
@@ -130,6 +155,10 @@ public class RestUtils {
 	}
 	
 	public static String[] getSelectedColumns(String tableName, String selectClause) {
+		return getSelectedColumns(null, tableName, selectClause);
+	}
+	
+	public static String[] getSelectedColumns(MRestView restView, String tableName, String selectClause) {
 		List<String> selectedColumns = new ArrayList<String>();
 		if (Util.isEmpty(selectClause, true) || Util.isEmpty(tableName, true))
 			return new String[0];
@@ -137,6 +166,11 @@ public class RestUtils {
 		MTable mTable = MTable.get(Env.getCtx(), tableName);
 		String[] columnNames = selectClause.split("[,]");
 		for(String columnName : columnNames) {
+			if (restView != null) {
+				String restViewColumnName = restView.toColumnName(columnName);
+				if (restViewColumnName != null)
+					columnName = restViewColumnName;
+			}
 			MTable table = mTable;
 			if (table.getColumnIndex(columnName.trim()) < 0)
 				throw new IDempiereRestException(columnName + " is not a valid column of table " + table.getTableName(), Status.BAD_REQUEST);
@@ -223,7 +257,7 @@ public class RestUtils {
 	
 	public static boolean hasAccess(MTable table, boolean isReadWrite) {
 		MRole role = MRole.getDefault();
-		if (role == null)
+		if (table == null || role == null)
 			return false;
 		
 		StringBuilder builder = new StringBuilder("SELECT DISTINCT a.AD_Window_ID FROM AD_Window a JOIN AD_Tab b ON a.AD_Window_ID=b.AD_Window_ID ");
@@ -245,7 +279,7 @@ public class RestUtils {
 		}
 		
 		//If no window or no access to the window - check if the role has read/write access to the table
-		return role.isTableAccess(table.getAD_Table_ID(), false);
+		return role.isTableAccess(table.getAD_Table_ID(), !isReadWrite);
 	}
 	
 	public static boolean hasRoleUpdateAccess(int AD_Client_ID, int AD_Org_ID, int AD_Table_ID, int Record_ID, boolean isNew) {
@@ -262,14 +296,221 @@ public class RestUtils {
 	public static boolean hasRoleColumnAccess(int AD_Table_ID, int AD_Column_ID, boolean readOnly) {
 		return MRole.getDefault(Env.getCtx(), false).isColumnAccess(AD_Table_ID, AD_Column_ID, readOnly);
 	}
+
+	/**
+	 * Get view definition
+	 * @param name
+	 * @return Rest view.
+	 */
+	public static MRestView getView(String name) {
+		MRestView view = MRestView.get(name);
+		if (view == null || view.get_ID()==0) {
+			return null;
+		}
+		
+		return view;
+	}
+
+	/**
+	 * Get column that link parent and child table.<br/>
+	 * If same column name is use to link parent and child table, return a single column name.</br>
+	 * If different column name is use to link parent and child table, return parentColumnName:childColumnName.
+	 * @param parentTable
+	 * @param childTable
+	 * @return single column name or parentColumnName:childColumnName
+	 */
+	public static String getLinkKeyColumnName(String parentTable, String childTable) {
+		MTable pTable = MTable.get(Env.getCtx(), parentTable);
+		MTable cTable = MTable.get(Env.getCtx(), childTable);
+		if (cTable == null || cTable.getAD_Table_ID()==0) {
+			throw new IDempiereRestException("Invalid table name", "No match found for table name: " + childTable, Status.NOT_FOUND);
+		}		
+		MColumn[] cColumns = cTable.getColumns(false);
+		String[] parentKeys = pTable.getKeyColumns();
+		
+		//handle tree
+		if (pTable.getAD_Table_ID() == cTable.getAD_Table_ID())
+		{
+			if (cTable.getColumn("Parent_ID") != null) {
+				if (parentKeys.length == 2 
+					&& "AD_Tree_ID".equals(parentKeys[0]) 
+					&& "Node_ID".equals(parentKeys[1]))
+					return parentKeys[1]+":Parent_ID";
+				else
+					return parentKeys[0]+":Parent_ID";
+			}
+			for(MColumn col : cColumns) {
+				if (col.isKey())
+					continue;
+				if (col.getColumnName().endsWith("_ID")) {
+					if (parentTable.equalsIgnoreCase(col.getReferenceTableName())) {
+						return parentKeys[0]+":"+col.getColumnName();
+					}
+				}
+			}
+			throw new IDempiereRestException("Wrong detail", "Cannot expand to the detail table because it has no column that links to the parent table: " + childTable, Status.INTERNAL_SERVER_ERROR);
+		}
+		
+		//check parent keys
+		if (parentKeys.length == 1) {
+			if (cTable.getColumnIndex(parentKeys[0]) >= 0) {
+				return parentKeys[0];
+			}
+			//match reference table of parent and child id column
+			for(MColumn c : cColumns) {
+				if (c.getColumnName().endsWith("_ID")) {
+					if (parentTable.equalsIgnoreCase(c.getReferenceTableName())) {
+						return parentKeys[0]+":"+c.getColumnName();
+					}
+				}
+			}
+		} else if (parentKeys.length > 1) {
+			for(String pKey : parentKeys) {
+				String pRefTable = pTable.getColumn(pKey).getReferenceTableName();
+				if (pRefTable != null) {
+					//match reference table of parent and child id column
+					for(MColumn c : cColumns) {
+						if (c.getColumnName().endsWith("_ID")) {
+							if (pRefTable.equalsIgnoreCase(c.getReferenceTableName())) {
+								return pKey+":"+c.getColumnName();
+							}
+						}
+					}
+				}
+			}
+		} 
+				
+		throw new IDempiereRestException("Wrong detail", "Cannot expand to the detail table because it has no column that links to the parent table: " + childTable, Status.INTERNAL_SERVER_ERROR);
+	}
 	
 	public static String getKeyColumnName(String tableName) {
+		return getKeyColumnName(tableName, false);
+	}
+		
+	/**
+	 * Get the primary key column name for a table.
+	 * @param tableName the table name
+	 * @param nullForMultipleKeys if true, return null when table has zero or multiple primary keys; 
+	 *                             if false, throw an exception in those cases
+	 * @return the primary key column name, or null if nullForMultipleKeys is true and table has != 1 primary key
+	 * @throws IDempiereRestException if nullForMultipleKeys is false and table has zero or multiple primary keys
+	 */
+	public static String getKeyColumnName(String tableName, boolean nullForMultipleKeys) {
 		MTable table = MTable.get(Env.getCtx(), tableName);
+		if (table == null)
+			throw new IDempiereRestException("Invalid Table Name", "The requested table name is invalid or does not exist. Please verify the table name and try again.", Status.BAD_REQUEST);
+		
 		String[] keyColumns = table.getKeyColumns();
 		
-		if (keyColumns.length <= 0 || keyColumns.length > 1)
+		if (keyColumns.length <= 0 || keyColumns.length > 1) {
+			if (nullForMultipleKeys)
+				return null;
 			throw new IDempiereRestException("Wrong detail", "Cannot expand to the detail table because it has none or more than one primary key: " + tableName, Status.INTERNAL_SERVER_ERROR);
+		}
 
 		return keyColumns[0];
 	}
+	
+	public static boolean isValidDetailTable(MTable childTable, String parentKeyColumnName) {
+		return childTable != null && childTable.getColumnIndex(parentKeyColumnName) > 0;
+	}
+	
+	/**
+	 * Defines whether the UUID value of a lookup record is returned in the response  
+	 * @param tableName
+	 * @return true if the lookup table should return the UUID in the REST response
+	 */
+	public static boolean isReturnUULookup(String tableName) {
+		String exportedUUTables = MSysConfig.getValue(EXPORT_UU_LOOKUP_SYSCONFIG_NAME, Env.getAD_Client_ID(Env.getCtx()));
+		return !Util.isEmpty(exportedUUTables) && 
+				(exportedUUTables.equals("ALL") || isStringInCommaSeparatedList(exportedUUTables, tableName));
+	}
+
+	public static boolean isStringInCommaSeparatedList(String commaSeparatedString, String stringToCompare) {
+		String[] tableArray = commaSeparatedString.split(",");
+		for (String tableName : tableArray) {
+			if (tableName.trim().equalsIgnoreCase(stringToCompare.trim())) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private static CCache<Integer, Properties> ctxSessionCache = new CCache<Integer, Properties>("REST_SessionCtxCache", 100, MSysConfig.getIntValue("REST_TOKEN_EXPIRE_IN_MINUTES", 60, Env.getAD_Client_ID(Env.getCtx())));
+
+	/**
+	 * Set the session context variables
+	 */
+	public static void setSessionContextVariables(Properties ctx) {
+		int sessionId = Env.getContextAsInt(ctx, Env.AD_SESSION_ID);
+		if (sessionId > 0) {
+			if (ctxSessionCache.containsKey(sessionId)) { 
+				// key found in cache, just set the properties found in cache and return
+				Properties savedCtx = ctxSessionCache.get(sessionId);
+				setCtxFromSavedCtx(ctx, savedCtx);
+				return;
+			}
+		} else {
+			// no session yet, can be in the login process
+			return;
+		}
+
+		// Context session not found in cache
+		Login login = new Login(ctx);
+		int orgId = Env.getAD_Org_ID(ctx);
+		KeyNamePair orgKNPair = null;
+		if (orgId >= 0) {
+			MOrg org = MOrg.get(orgId);
+			if (org != null) {
+				orgKNPair = new KeyNamePair(orgId, org.getName());
+			}
+		}
+		KeyNamePair warehouseKNPair = null;
+		int whId = Env.getContextAsInt(ctx, Env.M_WAREHOUSE_ID);
+		if (whId > 0) {
+			MWarehouse wh = MWarehouse.get(whId);
+			if (wh != null) {
+				warehouseKNPair = new KeyNamePair(whId, wh.getName());
+			}
+		}
+		login.loadPreferences(orgKNPair, warehouseKNPair, null, null);
+
+		if (sessionId > 0) {
+			Properties saveCtx = new Properties();
+			saveCtx.putAll(ctx);
+			ctxSessionCache.put(sessionId, saveCtx);
+		}
+	}
+
+	/**
+	 * Set a context from a saved/cached context
+	 * @param ctx
+	 * @param savedCtx
+	 */
+	private static void setCtxFromSavedCtx(Properties ctx, Properties savedCtx) {
+		savedCtx.forEach((key, value) -> {
+			if (value instanceof String)
+				Env.setContext(ctx, key.toString(), value.toString());
+			else
+				ctx.put(key, value);
+		});
+	}
+
+	/**
+	 * Remove a session from cache - on logout
+	 * @param sessionId
+	 */
+	public static void removeSavedCtx(int sessionId) {
+		ctxSessionCache.remove(sessionId);
+	}
+    
+    /**
+     * Get a unique window number for context management
+     * @return unique window number
+     */
+    public static int getWindowNo() {
+        return windowNoAtomic.getAndIncrement();
+    }
+
 }

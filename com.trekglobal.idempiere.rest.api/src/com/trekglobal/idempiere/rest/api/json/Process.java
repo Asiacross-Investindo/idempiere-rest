@@ -32,8 +32,12 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.adempiere.exceptions.AdempiereException;
 import org.apache.commons.codec.binary.Base64;
@@ -44,17 +48,21 @@ import org.compiere.model.MPInstance;
 import org.compiere.model.MPInstancePara;
 import org.compiere.model.MProcess;
 import org.compiere.model.MProcessPara;
+import org.compiere.model.MSysConfig;
 import org.compiere.model.MTable;
 import org.compiere.print.MPrintFormat;
 import org.compiere.process.ProcessInfo;
 import org.compiere.process.ProcessInfoLog;
 import org.compiere.process.ProcessInfoUtil;
+import org.compiere.util.CLogger;
+import org.compiere.util.DB;
 import org.compiere.util.DisplayType;
 import org.compiere.util.Env;
 import org.compiere.util.Msg;
 import org.compiere.util.Util;
 import org.idempiere.distributed.IClusterService;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonIOException;
@@ -71,6 +79,8 @@ import com.trekglobal.idempiere.rest.api.util.ClusterUtil;
  *
  */
 public class Process {
+
+	private final static CLogger classLog = CLogger.getCLogger(Process.class);
 
 	private Process() {
 	}
@@ -97,21 +107,55 @@ public class Process {
 			if (element == null)
 				element = jsonObject.get(columnName);
 			if (element != null) {			
-				Object value = TypeConverterUtils.fromJsonValue(gridField, element);
-				if (value != null) {
-					if (value instanceof BigDecimal)
-						iParam.setP_Number((BigDecimal)value);
-					else if (value instanceof Number)
-						iParam.setP_Number(((Number)value).intValue());
-					else if (value instanceof Timestamp)
-						iParam.setP_Date((Timestamp) value);
-					else
-						iParam.setP_String(value.toString());
+				// Handle FileName type with JSON object containing fileName and fileContent
+				if (processPara.getAD_Reference_ID() == DisplayType.FileName && element.isJsonObject()) {
+					JsonObject fileObject = element.getAsJsonObject();
+					JsonElement fileContentElement = fileObject.get("fileContent");
+					if (fileContentElement != null && fileContentElement.isJsonPrimitive()) {
+						try {
+							String base64Content = fileContentElement.getAsString();
+							byte[] decodedBytes = java.util.Base64.getDecoder().decode(base64Content);
+							if (decodedBytes != null && decodedBytes.length > 0) {
+								// Determine file extension from filename if provided
+								JsonElement filenameElement = fileObject.get("fileName");
+								String fileName;
+								if (filenameElement != null && filenameElement.isJsonPrimitive())
+									fileName = filenameElement.getAsString();
+								else
+									fileName = "RESTUploadedFile.bin";
+								// Create a temp file with the decoded content
+								String prefix = MSysConfig.getValue(MSysConfig.UPLOAD_TEMP_FILENAME_PREFIX, "idempiere_", Env.getAD_Client_ID(Env.getCtx()));
+								Path tempFile = Files.createTempFile(prefix, "_" + fileName);
+								tempFile.toFile().deleteOnExit();
+								Files.write(tempFile, decodedBytes);
+								iParam.setP_String(tempFile.toAbsolutePath().toString());
+							}
+						} catch (Exception e) {
+							throw new AdempiereException(processPara.getName() + " is not a valid base64 encoded file content: " + e.getMessage(), e);
+						}
+					} else {
+						throw new AdempiereException(processPara.getName() + " requires 'fileContent' element with base64 encoded content");
+					}
+				} else {
+					Object value = TypeConverterUtils.fromJsonValue(gridField, element);
+					if (value != null) {
+						if (value instanceof BigDecimal)
+							iParam.setP_Number((BigDecimal)value);
+						else if (value instanceof Number)
+							iParam.setP_Number(((Number)value).intValue());
+						else if (value instanceof Timestamp)
+							iParam.setP_Date((Timestamp) value);
+						else {
+							iParam.setP_String(value.toString());
+						}
+					}
 				}
 			}
 			if (processPara.isRange()) {
 				String toPropertyName = propertyName + "_to";
 				element = jsonObject.get(toPropertyName);
+				if (element == null)
+					element = jsonObject.get(columnName + "_to");
 				if (element != null) {			
 					Object value = TypeConverterUtils.fromJsonValue(gridField, element);
 					if (value != null) {
@@ -203,7 +247,9 @@ public class Process {
 		processInfo.setExport(true);
 		JsonElement printFormatIdElement = jsonObject.get("print-format-id");
 		if (printFormatIdElement != null && printFormatIdElement.isJsonPrimitive()) {
-			int AD_PrintFormat_ID = printFormatIdElement.getAsInt();
+			String printFormatStr = printFormatIdElement.getAsString();
+			boolean isUUID = Util.isUUID(printFormatStr);
+			int AD_PrintFormat_ID = isUUID ? getPrintFormatId(printFormatStr) : Integer.valueOf(printFormatStr);
 			if (AD_PrintFormat_ID > 0) 
 			{
 				MPrintFormat format = new MPrintFormat(Env.getCtx(), AD_PrintFormat_ID, null);
@@ -236,6 +282,19 @@ public class Process {
 		processInfoJson.addProperty("AD_PInstance_ID", processInfo.getAD_PInstance_ID());
 		processInfoJson.addProperty("process", processSlug);
 		processInfoJson.addProperty("summary", processInfo.getSummary());
+		
+		String data = processInfo.getJsonData();
+		if (data != null && !data.isEmpty()) {
+			JsonElement dataElement;
+			try {
+				dataElement = JsonParser.parseString(data);
+				processInfoJson.add("data", dataElement.getAsJsonObject());
+			} catch (Exception e) {
+				dataElement = null;
+				classLog.warning(e.getMessage());
+			}
+		}
+		
 		processInfoJson.addProperty("isError", processInfo.isError());
 		if (processInfo.getPDFReport() != null) {
 			File file = processInfo.getPDFReport();
@@ -259,20 +318,32 @@ public class Process {
 			JsonArray logArray = new JsonArray();
 			SimpleDateFormat dateFormat = DisplayType.getDateFormat(DisplayType.Date);
 			for(ProcessInfoLog log : logs) {
-				StringBuilder sb = new StringBuilder();
+				Map<String, Object> logMap = new HashMap<String, Object>();
+				
 				if (log.getP_Date() != null)
-					sb.append(dateFormat.format(log.getP_Date()))
-					  .append(" \t");
+					logMap.put("date", dateFormat.format(log.getP_Date()));
 				//
 				if (log.getP_Number() != null)
-					sb.append(log.getP_Number())
-					  .append(" \t");
+					logMap.put("number",log.getP_Number());
+				//
+				String logData = log.getJsonData();
+				if (logData != null && !logData.isEmpty()) {
+					JsonElement dataElement;
+					try {
+						dataElement = JsonParser.parseString(logData);
+						logMap.put("data", dataElement.getAsJsonObject());
+					} catch (Exception e) {
+						dataElement = null;
+					}
+				}
 				//
 				if (log.getP_Msg() != null)
-					sb.append(Msg.parseTranslation(Env.getCtx(), log.getP_Msg()));
+					logMap.put("msg",Msg.parseTranslation(Env.getCtx(), log.getP_Msg()));
 				
-				JsonPrimitive logStr = new JsonPrimitive(sb.toString());
-				logArray.add(logStr);
+		        Gson gson = new Gson();
+		        JsonObject jsonObject = gson.toJsonTree(logMap).getAsJsonObject();
+
+				logArray.add(jsonObject);
 			}
 			processInfoJson.add("logs", logArray);
 		}
@@ -314,6 +385,11 @@ public class Process {
 			ex.printStackTrace();
 		}
 		return bos;
+	}
+
+	private static int getPrintFormatId(String uuid) {
+		String sql = "SELECT AD_PrintFormat_ID FROM AD_PrintFormat WHERE AD_PrintFormat_UU = ?";
+		return DB.getSQLValue(null, sql, uuid);
 	}
 
 }

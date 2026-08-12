@@ -27,13 +27,15 @@ package com.trekglobal.idempiere.rest.api.json;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import javax.ws.rs.core.Response.Status;
 
 import org.compiere.model.MColumn;
+import org.compiere.model.MLabel;
+import org.compiere.model.MLabelAssignment;
 import org.compiere.model.MSysConfig;
 import org.compiere.model.MTable;
 import org.compiere.model.MValRule;
@@ -45,16 +47,14 @@ import org.compiere.util.Util;
 
 import com.trekglobal.idempiere.rest.api.json.filter.ConvertedQuery;
 import com.trekglobal.idempiere.rest.api.json.filter.IQueryConverter;
+import com.trekglobal.idempiere.rest.api.model.MRestView;
 
 public class ModelHelper {
 	
 	private final static CLogger log = CLogger.getCLogger(ModelHelper.class);
 	private static final int DEFAULT_QUERY_TIMEOUT = 60 * 2;
-	private static final int MAX_RECORDS_SIZE = MSysConfig.getIntValue("REST_MAX_RECORDS_SIZE", 100);
 	private static final String CONTEXT_VARIABLES_SEPARATOR = ",";
 	private static final String CONTEXT_NAMEVALUE_SEPARATOR = ":";
-	
-	private static final AtomicInteger windowNoAtomic = new AtomicInteger();
 	
 	private String tableName;
 	private String filter;
@@ -63,24 +63,40 @@ public class ModelHelper {
 	private int skip;
 	private String validationRuleID;
 	private String context;
+	private String labelFilter;
 	
 	private int rowCount = 0;
 	private int pageCount = 0;
 	private String sqlStatement;
+	private MRestView view;
 	
 	public ModelHelper(String tableName, String filter, String orderBy, 
-			int top, int skip, String validationRuleID, String context) {
+			int top, int skip, String validationRuleID, String context, String labelFilter) {
 		this.tableName=tableName;
 		this.filter=filter;
 		this.orderBy=orderBy;
 		this.top=top;
 		this.skip=skip;
 		this.validationRuleID=validationRuleID;
-		this.context=context;		
+		this.context=context;
+		this.labelFilter=labelFilter;
+	}
+	
+	public ModelHelper(String tableName, String filter, String orderBy, 
+			int top, int skip, String validationRuleID, String context) {
+		this(tableName, filter, orderBy, top, skip, validationRuleID, context, null);
 	}
 	
 	public ModelHelper(String tableName, String filter, String orderBy, int top, int skip) {
 		this(tableName, filter, orderBy, top, skip, null, null);
+	}
+	
+	public void setView(MRestView view) {
+		this.view = view;
+		//validate view and tableName agree, should never happens
+		if (view != null && !(MTable.getTableName(Env.getCtx(), view.getAD_Table_ID()).equalsIgnoreCase(tableName))) {
+			throw new IllegalArgumentException("Rest view belongs to a different table from what this ModelHelper is using");
+		}
 	}
 	
 	public List<PO> getPOsFromRequest() {
@@ -88,20 +104,78 @@ public class ModelHelper {
 	}
 	
 	public List<PO> getPOsFromRequest(String[] includeColumns) {
+		Query query = buildQueryFromRequest(includeColumns);
+		return query.list();
+	}
 
+	/**
+	 * Returns a lazily-evaluated {@link Stream} of POs matching the request.
+	 * <p>
+	 * The returned stream is backed by an open JDBC {@code ResultSet}; the caller
+	 * <b>must</b> close it (preferably via try-with-resources) to release the
+	 * underlying database resources. Failure to do so will leak cursors and
+	 * connections.
+	 *
+	 * @param includeColumns columns to select; may be {@code null} or empty
+	 * @return a stream of matching POs that must be closed by the caller
+	 */
+	public Stream<PO> getStreamFromRequest(String[] includeColumns) {
+		Query query = buildQueryFromRequest(includeColumns);
+		return query.stream();
+	}
+
+	/**
+	 * Convenience wrapper: returns a stream of POs using the helper's
+	 * current filter/ordering, with no specific columns requested.
+	 * <p>
+	 * Note: This is just a shorthand for {@code getStreamFromRequest(null)}. The
+	 * stream contract (caller must close it) remains the same.
+	 *
+	 * @return a stream of matching POs that must be closed by the caller
+	 */
+	public Stream<PO> getStreamFromRequest() {
+		return getStreamFromRequest(null);
+	}
+
+	private Query buildQueryFromRequest(String[] includeColumns) {
 		String whereClause = getRequestWhereClause();
 		IQueryConverter converter = IQueryConverter.getQueryConverter("DEFAULT");
 		MTable table = RestUtils.getTableAndCheckAccess(tableName);
 
-		ConvertedQuery convertedStatement = converter.convertStatement(tableName, whereClause);
+		ConvertedQuery convertedStatement = converter.convertStatement(view, tableName, whereClause);
 		String convertedWhereClause = getFullWhereClause(convertedStatement);
+		List<Object> parameters = new ArrayList<Object>();
+		parameters.addAll(convertedStatement.getParameters());
+		
+		if (!Util.isEmpty(labelFilter, true)) {
+			IQueryConverter converter0 = IQueryConverter.getQueryConverter("DEFAULT");
+			ConvertedQuery convertedStatement0 = converter0.convertStatement(MLabel.Table_Name, labelFilter);
+			String convertedWhereClause0 = convertedStatement0.getWhereClause();
+			if (!Util.isEmpty(convertedWhereClause0, true)) {
+				StringBuilder whereClause0 = new StringBuilder();
+				whereClause0.append("(" + table.getAD_Table_ID() + ", " + PO.getUUIDColumnName(table.getTableName()) + ") IN (");
+				whereClause0.append("SELECT ").append(MLabelAssignment.COLUMNNAME_AD_Table_ID).append(", ").append(MLabelAssignment.COLUMNNAME_Record_UU);
+				whereClause0.append(" FROM ").append(MLabelAssignment.Table_Name);
+				whereClause0.append(" WHERE ").append(MLabelAssignment.COLUMNNAME_IsActive).append("='Y'");
+				whereClause0.append(" AND ").append(MLabelAssignment.COLUMNNAME_AD_Label_ID).append(" IN (");
+				whereClause0.append("SELECT ").append(MLabel.COLUMNNAME_AD_Label_ID);
+				whereClause0.append(" FROM ").append(MLabel.Table_Name);
+				whereClause0.append(" WHERE ").append(MLabel.COLUMNNAME_IsActive).append("='Y'");
+				whereClause0.append(" AND ").append(convertedWhereClause0).append("))");
+				if (convertedWhereClause.length() > 0)
+					convertedWhereClause += " AND ";
+				convertedWhereClause += whereClause0.toString();
+				parameters.addAll(convertedStatement0.getParameters());
+			}
+		}
 
-		Query query = RestUtils.getQuery(tableName, convertedWhereClause,  new ArrayList<Object>(convertedStatement.getParameters()));
+		Query query = RestUtils.getQuery(tableName, convertedWhereClause, parameters);
 		addOrderByWhenValid(table, orderBy, query);
 
 		query.setQueryTimeout(DEFAULT_QUERY_TIMEOUT);
 		rowCount = query.count();
 		pageCount = 1;
+		int MAX_RECORDS_SIZE = MSysConfig.getIntValue("REST_MAX_RECORDS_SIZE", 100);
 		if (MAX_RECORDS_SIZE > 0 && (top > MAX_RECORDS_SIZE || top <= 0))
 			top = MAX_RECORDS_SIZE;
 
@@ -110,12 +184,13 @@ public class ModelHelper {
 		} 
 		query.setPageSize(top);
 		query.setRecordstoSkip(skip);
+		query.setNoVirtualColumn(false);
 
 		if (includeColumns != null && includeColumns.length > 0)
 			query.selectColumns(includeColumns);
 		
 		sqlStatement= query.getSQL();
-		return query.list();
+		return query;
 	}
 	
 	private String getRequestWhereClause() {
@@ -144,6 +219,18 @@ public class ModelHelper {
 			}
 		}
 		
+		//add optional where clause from view definition
+		if (view != null && !Util.isEmpty(view.getWhereClause(), true)) {
+			String viewWhereClause = view.getWhereClause();
+			int atIdx = viewWhereClause.indexOf("@");
+			if (atIdx >= 0 && viewWhereClause.indexOf("@", atIdx+1) > atIdx) {
+				viewWhereClause = Env.parseContext(Env.getCtx(), -1, viewWhereClause, false);
+			}
+			if (!Util.isEmpty(convertedWhereClause))
+				convertedWhereClause =  convertedWhereClause + " AND ";			
+			convertedWhereClause = convertedWhereClause + "(" + viewWhereClause + ")";
+		}
+		
 		return convertedWhereClause;
 	} 
 	
@@ -153,7 +240,7 @@ public class ModelHelper {
 	
 	private String parseContext(String whereClause, String context) {
 		String parsedWhereClause = whereClause;
-		int windowNo = windowNoAtomic.getAndIncrement();
+		int windowNo = RestUtils.getWindowNo();
 
 		for (String contextNameValue : context.split(CONTEXT_VARIABLES_SEPARATOR)) {
 			String[] namevaluePair = contextNameValue.split(CONTEXT_NAMEVALUE_SEPARATOR);

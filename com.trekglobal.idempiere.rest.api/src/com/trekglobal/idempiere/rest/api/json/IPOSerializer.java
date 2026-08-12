@@ -32,6 +32,7 @@ import org.compiere.model.MTable;
 import org.compiere.model.PO;
 
 import com.google.gson.JsonObject;
+import com.trekglobal.idempiere.rest.api.model.MRestView;
 
 /**
  * 
@@ -47,7 +48,38 @@ public interface IPOSerializer {
 	 * @return JsonObject
 	 */
 	public default JsonObject toJson(PO po) {
-		return toJson(po, null, null);
+		return toJson(po, (MRestView)null, (String[])null, (String[])null, (String)null);
+	}
+
+	/**
+	 * Transform PO to JsonObject within the given transaction
+	 * @param po
+	 * @param trxName transaction name, or null to read committed data
+	 * @return JsonObject
+	 */
+	public default JsonObject toJson(PO po, String trxName) {
+		return toJson(po, (MRestView)null, (String[])null, (String[])null, trxName);
+	}
+
+	/**
+	 * Transform PO to JsonObject
+	 * @param po
+	 * @param view
+	 * @return JsonObject
+	 */
+	public default JsonObject toJson(PO po, MRestView view) {
+		return toJson(po, view, (String[])null, (String[])null, (String)null);
+	}
+
+	/**
+	 * Transform PO to JsonObject within the given transaction
+	 * @param po
+	 * @param view
+	 * @param trxName transaction name, or null to read committed data
+	 * @return JsonObject
+	 */
+	public default JsonObject toJson(PO po, MRestView view, String trxName) {
+		return toJson(po, view, (String[])null, (String[])null, trxName);
 	}
 
 	/**
@@ -58,7 +90,32 @@ public interface IPOSerializer {
 	 * @return JsonObject
 	 */
 	public JsonObject toJson(PO po, String[] includes, String[] excludes);
-	
+
+	/**
+	 * Transform PO to JsonObject
+	 * @param po
+	 * @param view
+	 * @param includes columns to include
+	 * @param excludes columns to exclude
+	 * @return JsonObject
+	 */
+	public default JsonObject toJson(PO po, MRestView view, String[] includes, String[] excludes) {
+		return toJson(po, includes, excludes);
+	}
+
+	/**
+	 * Transform PO to JsonObject within the given transaction
+	 * @param po
+	 * @param view
+	 * @param includes columns to include
+	 * @param excludes columns to exclude
+	 * @param trxName transaction name, or null to read committed data
+	 * @return JsonObject
+	 */
+	public default JsonObject toJson(PO po, MRestView view, String[] includes, String[] excludes, String trxName) {
+		return toJson(po, view, includes, excludes);
+	}
+
 	/**
 	 * Transform JsonObject to PO
 	 * @param json
@@ -66,7 +123,30 @@ public interface IPOSerializer {
 	 * @return PO
 	 */
 	public PO fromJson(JsonObject json, MTable table);
-	
+
+	/**
+	 * Transform JsonObject to PO
+	 * @param json
+	 * @param table
+	 * @param view
+	 * @return PO
+	 */
+	default PO fromJson(JsonObject json, MTable table, MRestView view) {
+		return fromJson(json, table);
+	}
+
+	/**
+	 * Transform JsonObject to PO within the given transaction
+	 * @param json
+	 * @param table
+	 * @param view
+	 * @param trxName transaction name, or null for auto-commit
+	 * @return PO
+	 */
+	default PO fromJson(JsonObject json, MTable table, MRestView view, String trxName) {
+		return fromJson(json, table, view);
+	}
+
 	/**
 	 * Copy values from JsonObject to PO
 	 * @param json
@@ -74,6 +154,29 @@ public interface IPOSerializer {
 	 * @return PO
 	 */
 	public PO fromJson(JsonObject json, PO po);
+
+	/**
+	 * Copy values from JsonObject to PO
+	 * @param json
+	 * @param po
+	 * @param view
+	 * @return PO
+	 */
+	default PO fromJson(JsonObject json, PO po, MRestView view) {
+		return fromJson(json, po);
+	}
+
+	/**
+	 * Copy values from JsonObject to PO within the given transaction
+	 * @param json
+	 * @param po
+	 * @param view
+	 * @param trxName transaction name, or null for auto-commit
+	 * @return PO
+	 */
+	default PO fromJson(JsonObject json, PO po, MRestView view, String trxName) {
+		return fromJson(json, po, view);
+	}
 	
 	/**
 	 * Get PO serializer
@@ -101,4 +204,5 @@ public interface IPOSerializer {
 		
 		return serializer;
 	}
+
 }

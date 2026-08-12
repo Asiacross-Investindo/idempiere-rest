@@ -1,9 +1,10 @@
 {
 	"info": {
-		"_postman_id": "66279549-4f8a-47d0-bee8-707a8d6a6cb3",
+		"_postman_id": "bc47a50e-32e6-48f5-8467-5fd3fdcd29bf",
 		"name": "trekglobal-idempiere-rest",
 		"description": "Import or create an environment with the variables: host, port, protocol, userName, password, clientId, roleId, organizationId, warehouseId, language, sysuserName and syspassword\n\nRun POST api/v1/auth/tokens to get the first authentication token.\n\nThen run PUT api/v1/auth/tokens to get the second authentication token.",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "7631578"
 	},
 	"item": [
 		{
@@ -12,7 +13,6 @@
 				{
 					"listen": "prerequest",
 					"script": {
-						"id": "498b4645-c774-4291-89fa-094f9a8a89f8",
 						"exec": [
 							""
 						],
@@ -22,7 +22,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "55efafab-f197-48e8-8026-c96a1d480ce1",
 						"exec": [
 							"var jsonData = pm.response.json();",
 							"pm.environment.set(\"authToken\", jsonData.token);",
@@ -37,13 +36,13 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					}
 				],
 				"body": {
@@ -125,7 +124,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "cb2e194f-86cc-4a22-8e44-c1d86ee63040",
 						"exec": [
 							"var jsonData = pm.response.json();",
 							"pm.environment.set(\"authToken\", jsonData.token);",
@@ -187,7 +185,8 @@
 							"pm.environment.set(\"authToken\", jsonData.token);",
 							"pm.environment.set(\"refreshToken\", jsonData.refresh_token);"
 						],
-						"type": "text/javascript"
+						"type": "text/javascript",
+						"packages": {}
 					}
 				}
 			],
@@ -207,7 +206,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"refresh_token\": \"{{refreshToken}}\"\n}"
+					"raw": "{\n    \"refresh_token\": \"{{refreshToken}}\",\n    \"clientId\": {{clientId}},\n    \"userId\": 101\n}"
 				},
 				"url": {
 					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/auth/refresh",
@@ -273,6 +272,138 @@
 					]
 				},
 				"description": "Logout the session related to a token."
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/auth/password-reset/request",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"{{resetEmail}}\",\n    \"language\": \"{{language}}\"\n}"
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/auth/password-reset/request",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"auth",
+						"password-reset",
+						"request"
+					]
+				},
+				"description": "Code-based password reset - step 1. Emails a one-time code. Response is neutral (never reveals whether the email is registered). No Authorization header."
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/auth/password-reset/verify",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = pm.response.json();",
+							"if (jsonData.verifiedToken) {",
+							"    pm.environment.set(\"resetVerifiedToken\", jsonData.verifiedToken);",
+							"}"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"{{resetEmail}}\",\n    \"code\": \"{{resetCode}}\"\n}"
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/auth/password-reset/verify",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"auth",
+						"password-reset",
+						"verify"
+					]
+				},
+				"description": "Code-based password reset - step 2. Verifies the emailed code and stores the returned verifiedToken in the resetVerifiedToken environment variable. No Authorization header."
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/auth/password-reset/complete",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"verifiedToken\": \"{{resetVerifiedToken}}\",\n    \"newPassword\": \"{{resetNewPassword}}\"\n}"
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/auth/password-reset/complete",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"auth",
+						"password-reset",
+						"complete"
+					]
+				},
+				"description": "Code-based password reset - step 3. Sets the new password using the verifiedToken from step 2. No Authorization header."
 			},
 			"response": []
 		},
@@ -574,6 +705,55 @@
 					]
 				},
 				"description": "Get records for table with optional filter, orderBy and pageNo parameter. Default page size is 100."
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/models/{table name}",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/c_tax?$filter=Name in ('106','PST','Exempt') AND C_Tax_ID in (106,107)&$select=Name",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"models",
+						"c_tax"
+					],
+					"query": [
+						{
+							"key": "$filter",
+							"value": "Name in ('106','PST','Exempt') AND C_Tax_ID in (106,107)"
+						},
+						{
+							"key": "$select",
+							"value": "Name"
+						}
+					]
+				},
+				"description": "Get records for table with optional filter using in operator"
 			},
 			"response": []
 		},
@@ -881,18 +1061,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -926,18 +1106,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -971,18 +1151,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -1012,18 +1192,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -1103,18 +1283,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -1143,19 +1323,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"name": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"body": {
@@ -1187,19 +1366,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"name": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"body": {
@@ -1231,19 +1409,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"name": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"body": {
@@ -1276,24 +1453,23 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"name": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"Name\": \"Monroe\",\n     \"C_Location_ID\": {\n        \"id\": 125,  // if id = 0 a new C_Location is created an linked to the record\n        \"address1\": \"address 1\",\n        \"address2\": \"address 2\",\n        \"address3\": \"address 3\",\n        \"address4\": \"address 4\",\n        \"address5\": \"address 5\",\n        \"postal\": \"postal\",\n        \"postal_add\": \"add\",\n        \"c_country_id\": 100,\n        \"c_region_id\": 102,\n        \"regionname\": \"RN\",\n        \"c_city_id\": 0,\n        \"city\": \"Near Village\",\n        \"comments\": \"comments\",\n        \"isactive\": true\n    }\n}"
+					"raw": "{\n    \"Name\": \"Monroe\",\n     \"C_Location_ID\": {\n        \"id\": 125,  // if id = 0 a new C_Location is created an linked to the record\n        \"address1\": \"address 1\",\n        \"address2\": \"address 2\",\n        \"address3\": \"address 3\",\n        \"address4\": \"address 4\",\n        \"address5\": \"address 5\",\n        \"postal\": \"postal\",\n        \"Postal_Add\": \"add\",\n        \"C_Country_ID\": 100,\n        \"C_Region_ID\": 102,\n        \"RegionName\": \"RN\",\n        \"C_City_ID\": 0,\n        \"city\": \"Near Village\",\n        \"comments\": \"comments\",\n        \"IsActive\": true\n    }\n}"
 				},
 				"url": {
 					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/c_bpartner_location/117",
@@ -1321,19 +1497,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"name": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"body": {
@@ -1366,19 +1541,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"name": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -1397,6 +1571,204 @@
 					]
 				},
 				"description": "Delete record by id"
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/models/{table name}/yaml",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/yaml",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/ad_user/yaml",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"models",
+						"ad_user",
+						"yaml"
+					]
+				},
+				"description": "Get openapi yaml for model"
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/models/{table name}?showlabel={column name}&label={where clause}",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/C_BPartner?showlabel=Name&label=Name eq '%23Customer'&$select=Name,IsCustomer,IsVendor&$filter=IsCustomer eq true&$expand=AD_User($select=Name,C_Job_ID;label=Name eq '%23Manager')",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"models",
+						"C_BPartner"
+					],
+					"query": [
+						{
+							"key": "showlabel",
+							"value": "Name"
+						},
+						{
+							"key": "label",
+							"value": "Name eq '%23Customer'"
+						},
+						{
+							"key": "$select",
+							"value": "Name,IsCustomer,IsVendor"
+						},
+						{
+							"key": "$filter",
+							"value": "IsCustomer eq true"
+						},
+						{
+							"key": "$expand",
+							"value": "AD_User($select=Name,C_Job_ID;label=Name eq '%23Manager')"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/models/{table name}/{id}?showlabel={columnname list}",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/C_BPartner/119?showlabel=Name,Description&$select=Name,IsCustomer,IsVendor",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"models",
+						"C_BPartner",
+						"119"
+					],
+					"query": [
+						{
+							"key": "showlabel",
+							"value": "Name,Description"
+						},
+						{
+							"key": "$select",
+							"value": "Name,IsCustomer,IsVendor"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/models/{table name}/{id}?showlabel",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/C_BPartner/119?showlabel&$select=Name,IsCustomer,IsVendor",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"models",
+						"C_BPartner",
+						"119"
+					],
+					"query": [
+						{
+							"key": "showlabel",
+							"value": null
+						},
+						{
+							"key": "$select",
+							"value": "Name,IsCustomer,IsVendor"
+						}
+					]
+				}
 			},
 			"response": []
 		},
@@ -1460,7 +1832,7 @@
 					}
 				],
 				"url": {
-					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/windows?$filter=name eq 'Bank / Cash'",
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/windows?$filter=name eq 'Bank/Cash'",
 					"protocol": "{{protocol}}",
 					"host": [
 						"{{host}}"
@@ -1474,7 +1846,7 @@
 					"query": [
 						{
 							"key": "$filter",
-							"value": "name eq 'Bank / Cash'"
+							"value": "name eq 'Bank/Cash'"
 						}
 					]
 				},
@@ -1489,18 +1861,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -1529,18 +1901,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -1571,18 +1943,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -1610,18 +1982,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -1656,18 +2028,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -1699,18 +2071,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -1741,18 +2113,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"body": {
@@ -1787,18 +2159,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"body": {
@@ -1834,18 +2206,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -1876,18 +2248,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"body": {
@@ -1909,6 +2281,55 @@
 					]
 				},
 				"description": "Example to create and complete a sales order document."
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/windows/sales-order dry run",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"isSOTrx\": true,\n\t\"C_DocTypeTarget_ID\": { \"identifier\": \"Standard Order\" },\n\t\"C_BPartner_ID\" : { \"identifier\": \"C&W Construction\" }\n}"
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/windows/sales-order",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"windows",
+						"sales-order"
+					],
+					"query": [
+						{
+							"key": "$save",
+							"value": "false"
+						}
+					]
+				},
+				"description": "Example to post sales order without saving to DB."
 			},
 			"response": []
 		},
@@ -2001,22 +2422,22 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
-					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/processes?$filter=contains(name,'Business Partner')",
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/processes?filter=contains(name,'Business Partner')",
 					"protocol": "{{protocol}}",
 					"host": [
 						"{{host}}"
@@ -2083,7 +2504,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "7ccb960b-7aa2-4605-acdb-ef506f278e3a",
 						"exec": [
 							"var jsonData = pm.response.json();",
 							"pm.environment.set(\"processFileName\", encodeURIComponent(jsonData.exportFile));",
@@ -2100,27 +2520,26 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"name": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n\t\"C_BPartner_ID\": \"117,114\",\n\t\"report-type\" : \"HTML\"\n}"
+					"raw": "{\n\t\"C_BPartner_ID\": \"117,114\",\n\t\"DateOrdered\": \"2022-01-01\",\n\t\"DateOrdered_to\": \"2022-12-31\",\n\t\"report-type\" : \"HTML\"\n}"
 				},
 				"url": {
-					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/processes/rv_bpartneropen",
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/processes/rv_orderdetail",
 					"protocol": "{{protocol}}",
 					"host": [
 						"{{host}}"
@@ -2130,7 +2549,7 @@
 						"api",
 						"v1",
 						"processes",
-						"rv_bpartneropen"
+						"rv_orderdetail"
 					]
 				},
 				"description": "Run process"
@@ -2138,7 +2557,140 @@
 			"response": []
 		},
 		{
-			"name": "api/v1/files/{file name}?length={file size}",
+			"name": "api/v1/tasks",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/tasks",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"tasks"
+					]
+				},
+				"description": "Get list of tasks accessible"
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/task/{task slug}",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/tasks/java-version",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"tasks",
+						"java-version"
+					]
+				},
+				"description": "Get task details by slug of task name"
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/tasks/{task slug}",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": ""
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/tasks/java-version",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"tasks",
+						"java-version"
+					]
+				},
+				"description": "Run task"
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/files?fileName={file name}&length={file size}",
 			"request": {
 				"method": "GET",
 				"header": [
@@ -2159,7 +2711,7 @@
 					}
 				],
 				"url": {
-					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/files/{{processFileName}}?length={{processFileLength}}&nodeId={{processNodeId}}",
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/files?fileName={{logFileName}}&length={{logFileLength}}",
 					"protocol": "{{protocol}}",
 					"host": [
 						"{{host}}"
@@ -2168,17 +2720,16 @@
 					"path": [
 						"api",
 						"v1",
-						"files",
-						"{{processFileName}}"
+						"files"
 					],
 					"query": [
 						{
-							"key": "length",
-							"value": "{{processFileLength}}"
+							"key": "fileName",
+							"value": "{{logFileName}}"
 						},
 						{
-							"key": "nodeId",
-							"value": "{{processNodeId}}"
+							"key": "length",
+							"value": "{{logFileLength}}"
 						}
 					]
 				},
@@ -2312,6 +2863,137 @@
 			"response": []
 		},
 		{
+			"name": "api/v1/models/{table name}/{id}/archives",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/c_invoice/1000045/archives",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"models",
+						"c_invoice",
+						"1000045",
+						"archives"
+					]
+				},
+				"description": "Get the list of archives (e.g. previously printed report PDFs) of a record, most recent first"
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/models/{table name}/{id}/archives/{archive id}",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/octet-stream",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/c_invoice/1000045/archives/1000123",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"models",
+						"c_invoice",
+						"1000045",
+						"archives",
+						"1000123"
+					]
+				},
+				"description": "Get the binary content of a single archive entry by AD_Archive_ID"
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/models/{table name}/{id}/archives/{archive id}?json",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/c_invoice/1000045/archives/1000123?json=true",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"models",
+						"c_invoice",
+						"1000045",
+						"archives",
+						"1000123"
+					],
+					"query": [
+						{
+							"key": "json",
+							"value": "true"
+						}
+					]
+				},
+				"description": "Get a single archive entry as base64 encoded JSON (json query param)"
+			},
+			"response": []
+		},
+		{
 			"name": "api/v1/models/{table name}/{id}/attachments",
 			"request": {
 				"method": "POST",
@@ -2363,19 +3045,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"name": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -2405,18 +3086,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -2445,18 +3126,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -2485,18 +3166,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -2524,18 +3205,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -2561,18 +3242,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -2597,7 +3278,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "ffb0396f-0ee5-4409-9827-a86690cbbff5",
 						"exec": [
 							"var jsonData = pm.response.json();",
 							"pm.environment.set(\"nodeId\", jsonData[jsonData.length-1].id);"
@@ -2611,18 +3291,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -2648,18 +3328,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -2685,7 +3365,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "c33ddf75-1929-40c9-b0b6-b554225db19a",
 						"exec": [
 							"var jsonData = pm.response.json();",
 							"pm.environment.set(\"logFileName\", encodeURIComponent(jsonData[jsonData.length-1].fileName));"
@@ -2699,18 +3378,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -2732,29 +3411,29 @@
 			"response": []
 		},
 		{
-			"name": "api/v1/nodes/{id}/logs/{fileName}",
+			"name": "api/v1/nodes/{id}/logs/file",
 			"request": {
 				"method": "GET",
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
 						"value": "application/json",
+						"type": "text",
 						"disabled": true
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
-					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/nodes/{{nodeId}}/logs/{{logFileName}}",
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/nodes/{{nodeId}}/logs/file?fileName={{logFileName}}",
 					"protocol": "{{protocol}}",
 					"host": [
 						"{{host}}"
@@ -2766,7 +3445,13 @@
 						"nodes",
 						"{{nodeId}}",
 						"logs",
-						"{{logFileName}}"
+						"file"
+					],
+					"query": [
+						{
+							"key": "fileName",
+							"value": "{{logFileName}}"
+						}
 					]
 				}
 			},
@@ -2778,7 +3463,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "239f2801-51fc-4d35-9b11-34c4582b7579",
 						"exec": [
 							""
 						],
@@ -2791,18 +3475,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -2830,7 +3514,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "94d76ec5-666a-47ba-81f4-12a5999eb00b",
 						"exec": [
 							""
 						],
@@ -2843,18 +3526,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -2881,7 +3564,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "a97a08b8-a189-46da-baa3-6ff30559ac75",
 						"exec": [
 							"var jsonData = pm.response.json();",
 							"pm.environment.set(\"serverId\", jsonData[jsonData.length-1].id);"
@@ -2895,18 +3577,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -2931,7 +3613,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "4d108837-7f51-4cda-aa5b-5486937b7f31",
 						"exec": [
 							""
 						],
@@ -2944,18 +3625,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -2981,7 +3662,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "fcbdae5f-019b-4f16-ad3a-ca68ac73f399",
 						"exec": [
 							""
 						],
@@ -2994,18 +3674,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -3032,7 +3712,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "d19788ae-41ae-4586-bb7d-8ff66a1c8eb0",
 						"exec": [
 							""
 						],
@@ -3045,18 +3724,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -3083,7 +3762,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "ffd87a6a-2a85-4b16-a713-6f472a432972",
 						"exec": [
 							"var jsonData = pm.response.json();",
 							"pm.environment.set(\"serverId\", jsonData[jsonData.length-1].id);"
@@ -3097,18 +3775,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -3134,7 +3812,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "347aca7e-b9d8-4d90-8bb7-7dfe6c7e6521",
 						"exec": [
 							""
 						],
@@ -3147,18 +3824,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -3185,7 +3862,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "39fa3084-736c-4bf7-9347-4f1a33d91bfa",
 						"exec": [
 							""
 						],
@@ -3198,18 +3874,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -3236,7 +3912,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "98d7d375-6650-41d4-98cb-e7c9fdf7a82a",
 						"exec": [
 							""
 						],
@@ -3249,18 +3924,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -3287,7 +3962,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "3d5b3165-6c82-48be-a5c7-4f98bd3dc673",
 						"exec": [
 							""
 						],
@@ -3300,18 +3974,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -3338,7 +4012,6 @@
 				{
 					"listen": "prerequest",
 					"script": {
-						"id": "d88285b3-4f94-424e-9e79-fd2aed5af693",
 						"exec": [
 							""
 						],
@@ -3348,7 +4021,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "c9830016-ec8b-4620-a283-88bf3804d74c",
 						"exec": [
 							"var jsonData = pm.response.json();",
 							"pm.environment.set(\"authToken\", jsonData.token);",
@@ -3363,13 +4035,13 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					}
 				],
 				"body": {
@@ -3399,7 +4071,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "bcce151c-c156-417a-b2c6-ffd63152d620",
 						"exec": [
 							"var jsonData = pm.response.json();",
 							"pm.environment.set(\"authToken\", jsonData.token);",
@@ -3461,7 +4132,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "aa571699-a880-4864-ae28-d9fb531b7f63",
 						"exec": [
 							"var jsonData = pm.response.json();",
 							"pm.environment.set(\"infoSlug\", jsonData[jsonData.length-1].slug);"
@@ -3475,18 +4145,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -3511,7 +4181,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "aef1f45c-45fe-432f-a061-c151023ac181",
 						"exec": [
 							""
 						],
@@ -3524,18 +4193,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -3561,7 +4230,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "0bb45ccb-d0bd-46aa-8003-a0e0637989f1",
 						"exec": [
 							""
 						],
@@ -3574,18 +4242,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -3612,7 +4280,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "3c4138e1-636b-4a6e-b8fb-ba00cadfa95f",
 						"exec": [
 							""
 						],
@@ -3625,18 +4292,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -3663,7 +4330,6 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "327a4a5f-a1a3-4e46-8920-edf15c851ab3",
 						"exec": [
 							""
 						],
@@ -3676,18 +4342,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"url": {
@@ -3792,19 +4458,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"name": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"body": {
@@ -3837,19 +4502,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"name": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"body": {
@@ -3882,19 +4546,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"name": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"body": {
@@ -3927,19 +4590,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"name": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"body": {
@@ -3972,19 +4634,18 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"name": "Content-Type",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Accept",
-						"type": "text",
-						"value": "application/json"
+						"value": "application/json",
+						"type": "text"
 					},
 					{
 						"key": "Authorization",
-						"type": "text",
-						"value": "Bearer {{authToken}}"
+						"value": "Bearer {{authToken}}",
+						"type": "text"
 					}
 				],
 				"body": {
@@ -4009,13 +4670,1688 @@
 				"description": "set user choice in a node by id"
 			},
 			"response": []
-		}
+		},
+		{
+			"name": "api/v1/statuslines",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/statuslines?$filter=EntityType neq 'D'&with_messages=true",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"statuslines"
+					],
+					"query": [
+						{
+							"key": "$filter",
+							"value": "EntityType neq 'D'"
+						},
+						{
+							"key": "with_messages",
+							"value": "true"
+						}
+					]
+				},
+				"description": "Get list of status lines"
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/statuslines/{statuslineid}",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/statuslines/200024",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"statuslines",
+						"200024"
+					]
+				},
+				"description": "Get message of a status line"
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/charts/{id}",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/charts/50002?width=800&height=600",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"charts",
+						"50002"
+					],
+					"query": [
+						{
+							"key": "width",
+							"value": "800"
+						},
+						{
+							"key": "height",
+							"value": "600"
+						}
+					]
+				},
+				"description": "Get chart Sales YTD with size 800x600"
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/charts/{id}/data",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/charts/50002/data",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"charts",
+						"50002",
+						"data"
+					]
+				},
+				"description": "Get data from chart 50002"
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/charts/data?$filter={where clause}",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/charts/data?$filter=AD_Chart_ID eq 50000 OR AD_Chart_ID eq 50001",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"charts",
+						"data"
+					],
+					"query": [
+						{
+							"key": "$filter",
+							"value": "AD_Chart_ID eq 50000 OR AD_Chart_ID eq 50001"
+						}
+					]
+				},
+				"description": "Get data from charts filtered by id"
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/menutree/{id}",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/menutree/10",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"menutree",
+						"10"
+					]
+				},
+				"description": "Get menu tree for an Id."
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/models/{tableName}?locale={locale}",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/{{tableName}}?locale={{locale}}",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"models",
+						"{{tableName}}"
+					],
+					"query": [
+						{
+							"key": "locale",
+							"value": "{{locale}}"
+						}
+					]
+				},
+				"description": "Get models with locale query parameter."
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/models/c_order - Create Order",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 201\", function () {",
+							"    pm.response.to.have.status(201);",
+							"});",
+							"var jsonData = pm.response.json();",
+							"if (jsonData && jsonData.id)",
+							"    pm.collectionVariables.set(\"c_order_id\", jsonData.id);"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"C_BPartner_ID\": 118,\n    \"C_DocTypeTarget_ID\": 132\n}\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/c_order?",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"models",
+						"c_order"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": null
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/models/c_order - Add Order Line",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"var jsonData = pm.response.json();",
+							"if (jsonData && jsonData.C_OrderLine && jsonData.C_OrderLine.length > 0)",
+							"    pm.collectionVariables.set(\"c_orderline_id\", jsonData.C_OrderLine[0].id);"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"C_OrderLine\": [\n        {\n            \"M_Product_ID\": 128,\n            \"QtyEntered\" : 1\n        }\n    ]\n}\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/c_order/:id",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"models",
+						"c_order",
+						":id"
+					],
+					"variable": [
+						{
+							"key": "id",
+							"value": "{{c_order_id}}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/models/c_order - Delete and Add Order Line",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"C_OrderLine\": [\n        {\n            \"id\": {{c_orderline_id}},\n            \"(delete)\" : true\n        },\n        {\n            \"M_Product_ID\": 137,\n            \"QtyEntered\": 1\n        }\n    ]\n}\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/c_order/:id",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"models",
+						"c_order",
+						":id"
+					],
+					"variable": [
+						{
+							"key": "id",
+							"value": "{{c_order_id}}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/models/c_order - Get Order and Order Lines",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/c_order/:id?$expand=C_OrderLine",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"models",
+						"c_order",
+						":id"
+					],
+					"query": [
+						{
+							"key": "$expand",
+							"value": "C_OrderLine"
+						}
+					],
+					"variable": [
+						{
+							"key": "id",
+							"value": "{{c_order_id}}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/uploads",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 201\", function () {\r",
+							"    pm.response.to.have.status(201);\r",
+							"});\r",
+							"var jsonData = pm.response.json();\r",
+							"if (jsonData && jsonData.uploadId)\r",
+							"    pm.collectionVariables.set(\"uploadId\", jsonData.uploadId);"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"fileName\": \"emoji_wallpaper.png\",\r\n    \"contentType\": \"image/png\",\r\n    \"fileSize\" : 292287,\r\n    \"chunkSize\" : 146144,\r\n    \"sha256\": \"0bfbc699c443b29ed58de31d29a0a989d7ea68f07e787c415157332c4bfaf427\",\r\n    \"uploadLocation\": \"ARCHIVE\",\r\n    \"expiresInSeconds\": 3600\r\n}\r\n"
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/uploads",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"uploads"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/uploads/{{uploadId}}",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {\r",
+							"    pm.response.to.have.status(200);\r",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": ""
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/uploads/{{uploadId}}?expiresInSeconds=3600",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"uploads",
+						"{{uploadId}}"
+					],
+					"query": [
+						{
+							"key": "expiresInSeconds",
+							"value": "3600"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/uploads//{{uploadId}}/chunks/1",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {\r",
+							"    pm.response.to.have.status(200);\r",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/octet-stream",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					},
+					{
+						"key": "X-Content-SHA256",
+						"value": "6917746089c7a660e470671cea53dc04b4c27027882fa744822eaab686a55405",
+						"type": "text"
+					},
+					{
+						"key": "X-Total-Chunks",
+						"value": "2",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "file",
+					"file": {
+						"src": "postman-cloud:///1f03ba17-94e1-4860-be9f-954b34dd13f4"
+					}
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/uploads/{{uploadId}}/chunks/1",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"uploads",
+						"{{uploadId}}",
+						"chunks",
+						"1"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/uploads/{{uploadId}}/chunks/2",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {\r",
+							"    pm.response.to.have.status(200);\r",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/octet-stream",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					},
+					{
+						"key": "X-Content-SHA256",
+						"value": "26d146bf4946a9f9bf6f7fc46dbfd60ad6b01fa16f5ef7d5cb982b9235d8edba",
+						"type": "text"
+					},
+					{
+						"key": "X-Total-Chunks",
+						"value": "2",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "file",
+					"file": {
+						"src": "postman-cloud:///1f03bbdc-1dc3-4fa0-9c09-71ea03ebb5a5"
+					}
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/uploads/{{uploadId}}/chunks/2",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"uploads",
+						"{{uploadId}}",
+						"chunks",
+						"2"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/uploads/{{uploadId}}/file",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {\r",
+							"    pm.response.to.have.status(200);\r",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "*/*",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": ""
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/uploads/{{uploadId}}/file",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"uploads",
+						"{{uploadId}}",
+						"file"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/uploads - Get pending uploads",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {\r",
+							"    pm.response.to.have.status(200);\r",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": ""
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/uploads",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"uploads"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/uploads/{{uploadId}}/copy - Copy uploaded file",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 202\", function () {\r",
+							"    pm.response.to.have.status(202);\r",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"copyLocation\": \"\",\r\n    \"tableName\": \"\",\r\n    \"recordId\": \"\"\r\n}"
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/uploads/{{uploadId}}/copy",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"uploads",
+						"{{uploadId}}",
+						"copy"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/uploads/{{uploadId}} - Cancel an upload",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": ""
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/uploads/{{uploadId}}",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"uploads",
+						"{{uploadId}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/batch single transaction",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "[\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_BPartner\",\n        \"body\": {\n            \"name\":\"Test creating BP with User and Interest Area from REST\",\n            \"AD_User\": [\n                {\n                    \"Name\":\"Test User with Interest area\",\n                    \"R_ContactInterest\": [\n                        {\n                            \"R_InterestArea_ID\":101\n                        }\n                    ]\n                }\n            ]\n        }\n    },\n    {\n        \"method\": \"PUT\",\n        \"path\": \"v1/models/C_BPartner/117\",\n        \"body\": {\n            \"description\": \"Test batch update {{$isoTimestamp}}\"\n        }\n    }\n]",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/batch?transaction=true",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"batch"
+					],
+					"query": [
+						{
+							"key": "transaction",
+							"value": "true",
+							"description": "if true, all requests are processed in a single transaction (default is true)"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/batch transaction per request",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "[\n    {\n        \"method\": \"PUT\",\n        \"path\": \"v1/models/C_BPartner/117\",\n        \"body\": {\n            \"description\": \"Test batch update {{$isoTimestamp}}\"\n        }\n    },\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_BPartner\",\n        \"body\": {\n            \"name\":\"Test creating BP with User and Interest Area from REST\",\n            \"AD_User\": [\n                {\n                    \"Name\":\"Test User with Interest area\",\n                    \"R_ContactInterest\": [\n                        {\n                            \"R_InterestArea_ID\":10000000\n                        }\n                    ]\n                }\n            ]\n        }\n    }\n]",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/batch?transaction=false",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"batch"
+					],
+					"query": [
+						{
+							"key": "transaction",
+							"value": "false",
+							"description": "if true, all requests are processed in a single transaction (default is true)"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/batch JSONPath reference (PK chaining)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "[\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_BPartner\",\n        \"responseAlias\": \"bpartner\",\n        \"body\": {\n            \"Value\": \"CUST-BATCHREF-{{$timestamp}}\",\n            \"Name\": \"Batch Reference Test {{$isoTimestamp}}\",\n            \"IsCustomer\": \"Y\"\n        }\n    },\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_BPartner_Location\",\n        \"body\": {\n            \"C_BPartner_ID\": \"@bpartner$.id@\",\n            \"AD_Org_ID\": \"@#AD_Org_ID@\",\n            \"Name\": \"Main\",\n            \"IsBillTo\": \"Y\",\n            \"IsShipTo\": \"Y\",\n            \"C_Location_ID\": {\n                \"Address1\": \"Hlavna 1\",\n                \"City\": \"Kosice\",\n                \"Postal\": \"04001\",\n                \"C_Country_ID\": {\n                    \"lookupColumn\": \"CountryCode\",\n                    \"lookupValue\": \"SK\"\n                }\n            }\n        }\n    }\n]",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/batch?transaction=true",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"batch"
+					],
+					"query": [
+						{
+							"key": "transaction",
+							"value": "true",
+							"description": "if true, all requests are processed in a single transaction (default is true)"
+						}
+					]
+				},
+				"description": "New sub-request in this batch references the id that the previous sub-request's response just generated, via @bpartner$.id@ - resolved against the response cached under the first sub-request's 'responseAlias': 'bpartner'. Wrapped in '@' the same way as @#AD_Org_ID@ below, iDempiere's own pre-existing Evaluator.VARIABLE_START_END_MARKER convention, so literal data containing '$' is never mistaken for a reference."
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/batch JSONPath alias (same table twice)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "[\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_BPartner\",\n        \"responseAlias\": \"bpartner\",\n        \"body\": {\n            \"Value\": \"CUST-ALIAS-{{$timestamp}}\",\n            \"Name\": \"Batch Alias Test {{$isoTimestamp}}\",\n            \"IsCustomer\": \"Y\"\n        }\n    },\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_Location\",\n        \"responseAlias\": \"billAddr\",\n        \"body\": {\n            \"Address1\": \"Hlavna 1\",\n            \"City\": \"Kosice\",\n            \"Postal\": \"04001\",\n            \"C_Country_ID\": {\n                \"lookupColumn\": \"CountryCode\",\n                \"lookupValue\": \"SK\"\n            }\n        }\n    },\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_Location\",\n        \"responseAlias\": \"shipAddr\",\n        \"body\": {\n            \"Address1\": \"Skladova 5\",\n            \"City\": \"Presov\",\n            \"Postal\": \"08001\",\n            \"C_Country_ID\": {\n                \"lookupColumn\": \"CountryCode\",\n                \"lookupValue\": \"SK\"\n            }\n        }\n    },\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_BPartner_Location\",\n        \"body\": {\n            \"C_BPartner_ID\": \"@bpartner$.id@\",\n            \"C_Location_ID\": \"@billAddr$.id@\",\n            \"Name\": \"Billing\",\n            \"IsBillTo\": \"Y\"\n        }\n    },\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_BPartner_Location\",\n        \"body\": {\n            \"C_BPartner_ID\": \"@bpartner$.id@\",\n            \"C_Location_ID\": \"@shipAddr$.id@\",\n            \"Name\": \"Shipping\",\n            \"IsShipTo\": \"Y\"\n        }\n    }\n]",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/batch?transaction=false",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"batch"
+					],
+					"query": [
+						{
+							"key": "transaction",
+							"value": "false",
+							"description": "if true, all requests are processed in a single transaction (default is true)"
+						}
+					]
+				},
+				"description": "C_Location is created twice in the same batch, disambiguated with a 'responseAlias' on each sub-request (billAddr / shipAddr), then each is referenced explicitly by alias (@billAddr$.id@ / @shipAddr$.id@) when creating the two C_BPartner_Location rows."
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/batch @alias$.jsonPathExpr@ (nested field, standard JSONPath)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "[\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_BPartner\",\n        \"responseAlias\": \"bp\",\n        \"body\": {\n            \"Value\": \"CUST-JSONPATH-{{$timestamp}}\",\n            \"Name\": \"Batch JSONPath Test {{$isoTimestamp}}\",\n            \"IsCustomer\": \"Y\"\n        }\n    },\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_BPartner\",\n        \"body\": {\n            \"Value\": \"CUST-JSONPATH-2-{{$timestamp}}\",\n            \"Name\": \"@bp$.AD_Org_ID.identifier@\",\n            \"IsCustomer\": \"Y\"\n        }\n    }\n]",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/batch?transaction=true",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"batch"
+					],
+					"query": [
+						{
+							"key": "transaction",
+							"value": "true",
+							"description": "if true, all requests are processed in a single transaction (default is true)"
+						}
+					]
+				},
+				"description": "@alias$.jsonPathExpr@ evaluates a standard JSONPath (RFC 9535) against the response cached under that 'responseAlias', wrapped in '@' the same way as @#GlobalVar@ so literal data containing '$' is never mistaken for a reference. Here 'bp' is the responseAlias of the C_BPartner created in step 1, and @bp$.AD_Org_ID.identifier@ reaches into the nested AD_Org_ID.identifier field of its response - two levels deep - so the second C_BPartner's Name ends up set to the org's name (e.g. 'HQ'). Also supports array indexing/filters, e.g. @alias$.Lines[0].C_OrderLine_ID@ or @alias$.Lines[?(@.QtyOrdered > 5)].C_OrderLine_ID@ (the inner '@' there is real JSONPath's own 'current node' filter syntax - unrelated to, and not confused with, our own outer '@...@' wrapper, since only the first and last characters of the value are checked for the wrapper). Note: references only resolve inside the request body, not inside \"path\", and the whole field value must be the reference - not a substring of a larger literal."
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/batch @#GlobalVar@ (session context)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "[\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_BPartner\",\n        \"body\": {\n            \"Value\": \"CUST-CTXVAR-{{$timestamp}}\",\n            \"Name\": \"Batch Context Var Test {{$isoTimestamp}}\",\n            \"IsCustomer\": \"Y\",\n            \"AD_Org_ID\": \"@#AD_Org_ID@\"\n        }\n    }\n]",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/batch?transaction=true",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"batch"
+					],
+					"query": [
+						{
+							"key": "transaction",
+							"value": "true",
+							"description": "if true, all requests are processed in a single transaction (default is true)"
+						}
+					]
+				},
+				"description": "Single sub-request resolving AD_Org_ID from the caller's session context via @#AD_Org_ID@ - iDempiere's own Evaluator.VARIABLE_START_END_MARKER convention, resolved through Env.parseContext, independent of any other sub-request."
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/batch unresolved reference (expect 400)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "[\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_BPartner_Location\",\n        \"body\": {\n            \"C_BPartner_ID\": \"@bpartner$.id@\",\n            \"Name\": \"Should Fail\",\n            \"IsBillTo\": \"Y\"\n        }\n    }\n]",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/batch?transaction=true",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"batch"
+					],
+					"query": [
+						{
+							"key": "transaction",
+							"value": "true",
+							"description": "if true, all requests are processed in a single transaction (default is true)"
+						}
+					]
+				},
+				"description": "No prior sub-request in this batch used responseAlias 'bpartner', so @bpartner$.id@ cannot resolve. Expect a 400 with an 'Unresolved batch reference' message, not a silent null."
+			},
+			"response": []
+		},
+		{
+			"name": "/api/v1/batch duplicate alias (expect 400)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "[\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_Location\",\n        \"responseAlias\": \"addr\",\n        \"body\": {\n            \"Address1\": \"Hlavna 1\",\n            \"City\": \"Kosice\",\n            \"Postal\": \"04001\",\n            \"C_Country_ID\": {\n                \"lookupColumn\": \"CountryCode\",\n                \"lookupValue\": \"SK\"\n            }\n        }\n    },\n    {\n        \"method\": \"POST\",\n        \"path\": \"v1/models/C_Location\",\n        \"responseAlias\": \"addr\",\n        \"body\": {\n            \"Address1\": \"Skladova 5\",\n            \"City\": \"Presov\",\n            \"Postal\": \"08001\",\n            \"C_Country_ID\": {\n                \"lookupColumn\": \"CountryCode\",\n                \"lookupValue\": \"SK\"\n            }\n        }\n    }\n]",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/batch?transaction=true",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"batch"
+					],
+					"query": [
+						{
+							"key": "transaction",
+							"value": "true",
+							"description": "if true, all requests are processed in a single transaction (default is true)"
+						}
+					]
+				},
+				"description": "The second sub-request reuses the 'addr' responseAlias already claimed by the first. Expect a 400 with an 'Invalid batch alias' message instead of the second response silently overwriting the first's cache entry."
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/health",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/health?key={{healthMonitoringKey}}&db={{dbStatusCheck}}",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"health"
+					],
+					"query": [
+						{
+							"key": "key",
+							"value": "{{healthMonitoringKey}}"
+						},
+						{
+							"key": "db",
+							"value": "{{dbStatusCheck}}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "api/v1/health",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{protocol}}://{{host}}:{{port}}/api/v1/health?key={{healthMonitoringKey}}&db={{dbStatusCheck}}",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"api",
+						"v1",
+						"health"
+					],
+					"query": [
+						{
+							"key": "key",
+							"value": "{{healthMonitoringKey}}"
+						},
+						{
+							"key": "db",
+							"value": "{{dbStatusCheck}}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+		  "name": "api/v1/models/{table name} - timestamp eq filter",
+		  "request": {
+			"method": "GET",
+			"header": [
+			  {
+				"key": "Content-Type",
+				"value": "application/json",
+				"type": "text"
+			  },
+			  {
+				"key": "Accept",
+				"value": "application/json",
+				"type": "text"
+			  },
+			  {
+				"key": "Authorization",
+				"value": "Bearer {{authToken}}",
+				"type": "text"
+			  }
+			],
+			"url": {
+			  "raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/c_tax?$filter=created eq '2003-01-08T15:06:11'&$select=name,created",
+			  "protocol": "{{protocol}}",
+			  "host": [
+				"{{host}}"
+			  ],
+			  "port": "{{port}}",
+			  "path": [
+				"api",
+				"v1",
+				"models",
+				"c_tax"
+			  ],
+			  "query": [
+				{
+				  "key": "$filter",
+				  "value": "created eq '2003-01-08T15:06:11'"
+				},
+				{
+				  "key": "$select",
+				  "value": "name,created",
+				  "type": "text"
+				}
+			  ]
+			},
+			"description": "Get records for table with optional filter, orderBy and pageNo parameter. Default page size is 100."
+		  },
+		  "response": []
+		},
+		{
+		  "name": "api/v1/models/{table name} - timestamp range filter",
+		  "request": {
+			"method": "GET",
+			"header": [
+			  {
+				"key": "Content-Type",
+				"value": "application/json",
+				"type": "text"
+			  },
+			  {
+				"key": "Accept",
+				"value": "application/json",
+				"type": "text"
+			  },
+			  {
+				"key": "Authorization",
+				"value": "Bearer {{authToken}}",
+				"type": "text"
+			  }
+			],
+			"url": {
+			  "raw": "{{protocol}}://{{host}}:{{port}}/api/v1/models/c_tax?$filter=created ge '2003-01-08T01:06:11Z' and created lt '2003-01-09T23:20:21Z'&$select=name,created",
+			  "protocol": "{{protocol}}",
+			  "host": [
+				"{{host}}"
+			  ],
+			  "port": "{{port}}",
+			  "path": [
+				"api",
+				"v1",
+				"models",
+				"c_tax"
+			  ],
+			  "query": [
+				{
+				  "key": "$filter",
+				  "value": "created ge '2003-01-08T01:06:11Z' and created lt '2003-01-09T23:20:21Z'"
+				},
+				{
+				  "key": "$select",
+				  "value": "name,created"
+				}
+			  ]
+			},
+			"description": "Get records for table with optional filter, orderBy and pageNo parameter. Default page size is 100."
+		  },
+		  "response": []
+		}		
 	],
 	"event": [
 		{
 			"listen": "prerequest",
 			"script": {
-				"id": "f99252ee-fad2-4ca9-a299-88ace3954be8",
 				"type": "text/javascript",
 				"exec": [
 					""
@@ -4025,7 +6361,6 @@
 		{
 			"listen": "test",
 			"script": {
-				"id": "556ced2e-d25c-44a9-b7b9-c3f1f95931ad",
 				"type": "text/javascript",
 				"exec": [
 					""
@@ -4033,5 +6368,19 @@
 			}
 		}
 	],
-	"protocolProfileBehavior": {}
+	"variable": [
+		{
+			"key": "c_order_id",
+			"value": ""
+		},
+		{
+			"key": "c_orderline_id",
+			"value": ""
+		},
+		{
+			"key": "uploadId",
+			"value": "0ebda05d-7107-4dae-85c3-1e916802aa8a",
+			"type": "default"
+		}
+	]
 }

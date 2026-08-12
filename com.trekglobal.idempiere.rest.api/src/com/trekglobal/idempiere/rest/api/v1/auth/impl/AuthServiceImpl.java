@@ -25,9 +25,11 @@
 **********************************************************************/
 package com.trekglobal.idempiere.rest.api.v1.auth.impl;
 
+import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.UUID;
+import java.util.logging.Level;
+import java.util.regex.Pattern;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.core.Context;
@@ -35,20 +37,30 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import javax.xml.bind.DatatypeConverter;
 
+import org.adempiere.base.Core;
+import org.adempiere.base.IPasswordResetService;
+import org.adempiere.exceptions.AdempiereException;
 import org.adempiere.util.LogAuthFailure;
 import org.compiere.model.I_AD_Preference;
 import org.compiere.model.MClient;
+import org.compiere.model.MClientInfo;
 import org.compiere.model.MOrg;
+import org.compiere.model.MOrgInfo;
 import org.compiere.model.MPreference;
 import org.compiere.model.MRole;
+import org.compiere.model.MRoleOrgAccess;
 import org.compiere.model.MSession;
 import org.compiere.model.MSysConfig;
 import org.compiere.model.MTable;
 import org.compiere.model.MUser;
+import org.compiere.model.MUserOrgAccess;
+import org.compiere.model.MWarehouse;
+import org.compiere.model.PO;
 import org.compiere.model.Query;
 import org.compiere.util.Env;
 import org.compiere.util.KeyNamePair;
 import org.compiere.util.Language;
+import org.compiere.util.CLogger;
 import org.compiere.util.Login;
 import org.compiere.util.Msg;
 import org.compiere.util.Util;
@@ -63,12 +75,17 @@ import com.auth0.jwt.interfaces.Claim;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.trekglobal.idempiere.rest.api.json.RestUtils;
+import com.trekglobal.idempiere.rest.api.model.MOIDCService;
 import com.trekglobal.idempiere.rest.api.model.MRefreshToken;
 import com.trekglobal.idempiere.rest.api.util.ErrorBuilder;
 import com.trekglobal.idempiere.rest.api.v1.auth.AuthService;
 import com.trekglobal.idempiere.rest.api.v1.auth.LoginCredential;
 import com.trekglobal.idempiere.rest.api.v1.auth.LoginParameters;
 import com.trekglobal.idempiere.rest.api.v1.auth.LogoutParameters;
+import com.trekglobal.idempiere.rest.api.v1.auth.PasswordResetCompletion;
+import com.trekglobal.idempiere.rest.api.v1.auth.PasswordResetRequest;
+import com.trekglobal.idempiere.rest.api.v1.auth.PasswordResetVerification;
 import com.trekglobal.idempiere.rest.api.v1.auth.RefreshParameters;
 import com.trekglobal.idempiere.rest.api.v1.auth.filter.RequestFilter;
 import com.trekglobal.idempiere.rest.api.v1.jwt.LoginClaims;
@@ -80,7 +97,12 @@ import com.trekglobal.idempiere.rest.api.v1.jwt.TokenUtils;
  */
 public class AuthServiceImpl implements AuthService {
 
+	private static final CLogger log = CLogger.getCLogger(AuthServiceImpl.class);
+
 	private static LogAuthFailure logAuthFailure = new LogAuthFailure();
+
+	/** HTTP 429 Too Many Requests (not in the JAX-RS Response.Status enum) */
+	private static final int SC_TOO_MANY_REQUESTS = 429;
 
 	public static final String ROLE_TYPES_WEBSERVICE = "NULL,WS";  //webservice+null
 
@@ -125,17 +147,75 @@ public class AuthServiceImpl implements AuthService {
 			Builder builder = JWT.create()
 					.withSubject(credential.getUserName())
 					.withClaim(LoginClaims.Clients.name(), clientsSB.toString());
-			Timestamp expiresAt = TokenUtils.getTokenExpiresAt();
-			builder.withIssuer(TokenUtils.getTokenIssuer()).withExpiresAt(expiresAt).withKeyId(TokenUtils.getTokenKeyId());
+			
+			//set client, role and org if user has access to 1 only
+			boolean setLoginParameters = false;
+			if (clients.length == 1 ) {
+				int clientId = clients[0].getKey();
+				String userName = credential.getUserName();
+				KeyNamePair[] roles = login.getRoles(userName, clients[0], ROLE_TYPES_WEBSERVICE);
+				if (roles.length == 1) {
+					int roleId = roles[0].getKey();
+					MUser user = MUser.get(Env.getCtx(), userName);
+					MRole role = MRole.get(Env.getCtx(), roleId);
+					int orgId = getOrgIdFirstOnly(user, role);
+					int warehouseId = 0;
+					if (orgId >= 0) {
+						warehouseId = MOrgInfo.get(orgId).getM_Warehouse_ID();
+					}
+					Env.setContext(Env.getCtx(), RequestFilter.LOGIN_NAME, userName);
+					String errorMessage = validateLoginParameters(userName, clientId, roleId, orgId, warehouseId);
+					if (Util.isEmpty(errorMessage)) {
+						addClientIdClaim(builder, clientId);
+						responseNode.addProperty("clientId", clientId);
+						addUserIdClaim(userName, responseNode, builder);
+						builder.withClaim(LoginClaims.AD_Role_ID.name(), roleId);
+						responseNode.addProperty("roleId", roleId);
+						builder.withClaim(LoginClaims.AD_Org_ID.name(), orgId);
+						responseNode.addProperty("organizationId", orgId);
+						if (orgId > 0 && warehouseId > 0) {
+							builder.withClaim(LoginClaims.M_Warehouse_ID.name(), warehouseId);
+							responseNode.addProperty("warehouseId", warehouseId);
+						}
+						String defaultLanguage = getPreferenceUserLanguage(user.getAD_User_ID());
+						addLanguageClaim(responseNode, builder, defaultLanguage);
+						
+						createSession(builder);
+						addMenuTreeIdResponse(responseNode);
+						setLoginParameters = true;
+					}
+				}
+			}
+			
+			addIssuerAndExpiresAt(builder);
 			try {
-				String token = builder.sign(Algorithm.HMAC512(TokenUtils.getTokenSecret()));
-				responseNode.addProperty("token", token);
+				createToken(responseNode, builder, setLoginParameters);
 			} catch (IllegalArgumentException | JWTCreationException e) {
 				e.printStackTrace();
 				return Response.status(Status.BAD_REQUEST).build();
 			}
 			return Response.ok(responseNode.toString()).build();
 		}
+	}
+
+	/**
+	 * Get organization id if user or role has access to only 1 organization
+	 * @param user
+	 * @param role
+	 * @return organization id if user or role has access to only 1 organization, -1 otherwise
+	 */
+	private int getOrgIdFirstOnly(MUser user, MRole role) {
+		int orgId = -1;
+		if (!role.isUseUserOrgAccess()) {
+			MRoleOrgAccess[] roleOrgAccess = MRoleOrgAccess.getOfRole(Env.getCtx(), role.getAD_Role_ID());
+			if (roleOrgAccess.length == 1)
+				orgId = roleOrgAccess[0].getAD_Org_ID();
+		} else {
+			MUserOrgAccess[] userOrgAccess =  MUserOrgAccess.getOfUser(Env.getCtx(), user.getAD_User_ID());
+			if (userOrgAccess.length == 1)
+				orgId = userOrgAccess[0].getAD_Org_ID();
+		}
+		return orgId;
 	}
 
 	/**
@@ -258,6 +338,7 @@ public class AuthServiceImpl implements AuthService {
 			MRole role = MRole.get(Env.getCtx(), roleId);
 			Env.setContext(Env.getCtx(), Env.AD_ROLE_ID, role.getAD_Role_ID());
 			MOrg org = MOrg.get(organizationId);
+			Env.setPredefinedVariables(Env.getCtx(), -1, MRole.getDefault().getPredefinedContextVariables());
 			KeyNamePair knp = new KeyNamePair(org.getAD_Org_ID(), org.getName());
 			KeyNamePair[] warehouses = login.getWarehouses(knp);
 			JsonArray array = new JsonArray();
@@ -285,6 +366,10 @@ public class AuthServiceImpl implements AuthService {
 	public Response getClientLanguage(int clientId) {
 		try {
 			MClient client = MClient.get(Env.getCtx(), clientId);
+			if (client == null || client.get_ID() <= 0) {
+				return Response.status(Status.BAD_REQUEST).build();
+			}
+			
 			JsonObject node = new JsonObject();
 			node.addProperty("AD_Language", client.getAD_Language());
 			return Response.ok(node.toString()).build();
@@ -308,26 +393,70 @@ public class AuthServiceImpl implements AuthService {
 	 * @param parameters
 	 * @param userName
 	 * @param clients
+	 * @param clientList 
 	 * @return
 	 */
 	private Response processLoginParameters(LoginParameters parameters, String userName, String clients) {
 		JsonObject responseNode = new JsonObject();
 		Builder builder = JWT.create().withSubject(userName);
 		String defaultLanguage = Language.getBaseAD_Language();
-		int clientId = parameters.getClientId();
-		boolean isValidClient = isValidClient(clientId, clients);
+		int clientId = getClientId(parameters, responseNode);
+		if (clientId == -2)
+			return unauthorized("Client value not found", userName);
+		boolean isValidClient = false;
+		if (clientId == -1) {
+			if (!Util.isEmpty(clients) && clients.indexOf(",") == -1) {			
+				clientId = Integer.parseInt(clients);
+				responseNode.addProperty("clientId", clientId);
+				isValidClient = true;
+			}
+		} else {
+			isValidClient = isValidClient(clientId, clients);
+		}
 
 		if (isValidClient) {
-			builder.withClaim(LoginClaims.AD_Client_ID.name(), clientId);
-			Env.setContext(Env.getCtx(), Env.AD_CLIENT_ID, clientId);
-			MUser user = MUser.get(Env.getCtx(), userName);
-			builder.withClaim(LoginClaims.AD_User_ID.name(), user.getAD_User_ID());
-			responseNode.addProperty("userId", user.getAD_User_ID());
+			addClientIdClaim(builder, clientId);
+			MUser user = addUserIdClaim(userName, responseNode, builder);
 			defaultLanguage = getPreferenceUserLanguage(user.getAD_User_ID());
 
-			int roleId = parameters.getRoleId();
-			int orgId = parameters.getOrganizationId();
-			int warehouseId = parameters.getWarehouseId();
+			int roleId = getRoleId(clientId, parameters, responseNode);
+			if (roleId == -2)
+				return unauthorized("Role name not found", userName);
+			else if (roleId == -3)
+				return unauthorized("Role name not unique", userName);
+			if (roleId == -1) {
+				Login login = new Login(Env.getCtx());
+				KeyNamePair[] roles = login.getRoles(userName, new KeyNamePair(clientId, MClient.get(clientId).getName()), ROLE_TYPES_WEBSERVICE);
+				if (roles.length == 1) {
+					roleId = roles[0].getKey();
+					responseNode.addProperty("roleId", roles[0].getKey());
+				}
+				else
+					return unauthorized("Missing roleId parameter", userName);
+			}
+			
+			int orgId = getOrganizationId(clientId, parameters, responseNode);
+			if (orgId == -2)
+				return unauthorized("Organization name not found", userName);
+			else if (orgId == -3)
+				return unauthorized("Organization name not unique", userName);
+			if (orgId == -1) {
+				orgId = getOrgIdFirstOnly(user, MRole.get(Env.getCtx(), roleId));
+				if (orgId == 0)
+					return unauthorized("Missing organizationId parameter", userName);
+				responseNode.addProperty("organizationId", orgId);
+			}
+			
+			int warehouseId = getWarehouseId(clientId, parameters, responseNode);
+			if (warehouseId == -2)
+				return unauthorized("Warehouse name not found", userName);
+			if (warehouseId == -1) {
+				if (orgId > 0) {
+					warehouseId = MOrgInfo.get(orgId).getM_Warehouse_ID();
+					if (warehouseId > 0)
+						responseNode.addProperty("warehouseId", warehouseId);
+				}
+			}
 			String errorMessage = validateLoginParameters(userName, clientId, roleId, orgId, warehouseId);
 
 			if (Util.isEmpty(errorMessage)) {
@@ -350,9 +479,182 @@ public class AuthServiceImpl implements AuthService {
 			}
 		}
 
+		addLanguageClaim(responseNode, builder, defaultLanguage);
+
+		createSession(builder);
+		
+		addMenuTreeIdResponse(responseNode);
+
+		addIssuerAndExpiresAt(builder);
+		try {
+			createToken(responseNode, builder, true);
+		} catch (IllegalArgumentException | JWTCreationException e) {
+			e.printStackTrace();
+			return Response.status(Status.BAD_REQUEST).build();
+		}
+		return Response.ok(responseNode.toString()).build();
+	}
+
+	/**
+	 * Get client id from login parameters
+	 * @param parameters
+	 * @param responseNode
+	 * @return client id or -1 (no clientId parameter) or -2 (client value not found)
+	 */
+	private int getClientId(LoginParameters parameters, JsonObject responseNode) {
+		String s = parameters.getClientId();
+		if (Util.isEmpty(s))
+			return -1;
+		int clientId = -1;
+		if (Pattern.matches("\\d+", s.trim())) {
+			clientId = Integer.parseInt(s.trim());
+			try {
+				PO.setCrossTenantSafe();
+				if (MClient.get(clientId).get_ID() == clientId)
+					return clientId;
+			} finally {
+				PO.clearCrossTenantSafe();
+			}
+		}
+		Query query = new Query(Env.getCtx(), MClient.Table_Name, "IsActive='Y' AND Value=?", null);
+		clientId = query.setParameters(s.trim()).firstId();
+		if (clientId == -1) {
+			return -2;
+		} else {
+			responseNode.addProperty("clientId", clientId);
+			return clientId;
+		}
+	}
+
+	/**
+	 * Get organization id from login parameters
+	 * @param clientId
+	 * @param parameters
+	 * @param responseNode
+	 * @return organization id or -1 (no organizationId parameter) or -2 (organization name not found) or -3 (organization name not unique)
+	 */
+	private int getOrganizationId(int clientId, LoginParameters parameters, JsonObject responseNode) {
+		String s = parameters.getOrganizationId();
+		if (Util.isEmpty(s))
+			return -1;
+		int orgId = -1;
+		if (Pattern.matches("\\d+", s.trim())) {
+			orgId = Integer.parseInt(s.trim());
+			if (MOrg.get(orgId) != null)
+				return orgId;
+		}
+		Query query = new Query(Env.getCtx(), MOrg.Table_Name, "AD_Client_ID=? AND IsActive='Y' AND (Name=? OR Value=?)", null);
+		try {
+			orgId = query.setParameters(clientId, s.trim(), s.trim()).firstIdOnly();
+		} catch (Exception e) {
+			return -3;
+		}
+		if (orgId == -1) {
+			return -2;
+		} else {
+			responseNode.addProperty("organizationId", orgId);
+			return orgId;
+		}
+	}
+
+	/**
+	 * Get role id from login parameters
+	 * @param clientId
+	 * @param parameters
+	 * @param responseNode 
+	 * @return role id or -1 (no roleId parameter) or -2 (role name not found) or -3 (role name not unique)
+	 */
+	private int getRoleId(int clientId, LoginParameters parameters, JsonObject responseNode) {
+		String s = parameters.getRoleId();
+		if (Util.isEmpty(s))
+			return -1;
+		int roleId = -1;
+		if (Pattern.matches("\\d+", s.trim())) {
+			roleId = Integer.parseInt(s.trim());
+			if (MRole.get(Env.getCtx(), roleId).get_ID() == roleId)
+				return roleId;
+		}
+		Query query = new Query(Env.getCtx(), MRole.Table_Name, "AD_Client_ID=? AND IsActive='Y' AND Name=?", null);
+		try {
+			roleId = query.setParameters(clientId, s.trim()).firstIdOnly();
+		} catch (Exception e) {
+			return -3;
+		}
+		if (roleId == -1) {
+			return -2;
+		} else {
+			responseNode.addProperty("roleId", roleId);
+			return roleId;
+		}
+	}
+
+	/**
+	 * Get warehouse id from login parameters
+	 * @param clientId
+	 * @param parameters
+	 * @param responseNode
+	 * @return warehouse id or -1 (no warehouseId parameter) or -2 (warehouse name not found)
+	 */
+	private int getWarehouseId(int clientId, LoginParameters parameters, JsonObject responseNode) {
+		String s = parameters.getWarehouseId();
+		if (Util.isEmpty(s))
+			return -1;
+		int warehouseId = -1;
+		if (Pattern.matches("\\d+", s.trim())) {
+			warehouseId = Integer.parseInt(s.trim());
+			if (warehouseId == 0 || MWarehouse.get(warehouseId) != null)
+				return warehouseId;
+		}
+		Query query = new Query(Env.getCtx(), MWarehouse.Table_Name, "AD_Client_ID=? AND IsActive='Y' AND (Name=? OR Value=?)", null);
+		warehouseId = query.setParameters(clientId, s.trim(), s.trim()).firstId();
+		if (warehouseId == -1) {
+			return -2;
+		} else {
+			responseNode.addProperty("warehouseId", warehouseId);
+			return warehouseId;
+		}
+	}
+
+	private void createToken(JsonObject responseNode, Builder builder, boolean createRefreshToken) {
+		String token = builder.sign(Algorithm.HMAC512(TokenUtils.getTokenSecret()));
+		responseNode.addProperty("token", token);
+		if (createRefreshToken) {
+			Timestamp absoluteExpiresAt = TokenUtils.getTokenAbsoluteExpiresAt();
+			responseNode.addProperty("refresh_token", generateRefreshToken(token, null, absoluteExpiresAt));
+		}
+	}
+
+	private void addIssuerAndExpiresAt(Builder builder) {
+		Timestamp expiresAt = TokenUtils.getTokenExpiresAt();
+		builder.withIssuer(TokenUtils.getTokenIssuer()).withExpiresAt(expiresAt).withKeyId(TokenUtils.getTokenKeyId());
+	}
+
+	private void addMenuTreeIdResponse(JsonObject responseNode) {
+		MRole role = MRole.getDefault();
+		int menuTreeId = role.getAD_Tree_Menu_ID();
+		if (menuTreeId <= 0)
+			menuTreeId = MClientInfo.get().getAD_Tree_Menu_ID();
+		responseNode.addProperty("menuTreeId", menuTreeId);
+	}
+
+	private void addLanguageClaim(JsonObject responseNode, Builder builder, String defaultLanguage) {
 		builder.withClaim(LoginClaims.AD_Language.name(), defaultLanguage);
 		responseNode.addProperty("language", defaultLanguage);
+	}
 
+	private void addClientIdClaim(Builder builder, int clientId) {
+		builder.withClaim(LoginClaims.AD_Client_ID.name(), clientId);
+		Env.setContext(Env.getCtx(), Env.AD_CLIENT_ID, clientId);
+	}
+
+	private MUser addUserIdClaim(String userName, JsonObject responseNode, Builder builder) {
+		MUser user = MUser.get(Env.getCtx(), userName);
+		builder.withClaim(LoginClaims.AD_User_ID.name(), user.getAD_User_ID());
+		responseNode.addProperty("userId", user.getAD_User_ID());
+		return user;
+	}
+
+	private void createSession(Builder builder) {
 		// Create AD_Session here and set the session in the token as another parameter
 		MSession session = MSession.get(Env.getCtx());
 		if (session == null){
@@ -361,18 +663,6 @@ public class AuthServiceImpl implements AuthService {
 			session.saveEx();
 		}
 		builder.withClaim(LoginClaims.AD_Session_ID.name(), session.getAD_Session_ID());
-
-		Timestamp expiresAt = TokenUtils.getTokenExpiresAt();
-		builder.withIssuer(TokenUtils.getTokenIssuer()).withExpiresAt(expiresAt).withKeyId(TokenUtils.getTokenKeyId());
-		try {
-			String token = builder.sign(Algorithm.HMAC512(TokenUtils.getTokenSecret()));
-			responseNode.addProperty("token", token);
-			responseNode.addProperty("refresh_token", generateRefreshToken(token, null));
-		} catch (IllegalArgumentException | JWTCreationException e) {
-			e.printStackTrace();
-			return Response.status(Status.BAD_REQUEST).build();
-		}
-		return Response.ok(responseNode.toString()).build();
 	}
 
 	private boolean isValidClient(int clientID, String clients) {
@@ -504,12 +794,33 @@ public class AuthServiceImpl implements AuthService {
 	@Override
 	public Response tokenRefresh(RefreshParameters refresh) {
 		String refreshToken = refresh.getRefresh_token();
+		Integer refreshClientId = refresh.getClientId();
+		if (refreshClientId == null && MSysConfig.getBooleanValue("REST_MANDATORY_CLIENT_ID_ON_REFRESH", true)) {
+			return Response.status(Status.UNAUTHORIZED)
+					.entity(new ErrorBuilder().status(Status.UNAUTHORIZED).title("Authenticate error").append("No clientId provided").build().toString())
+					.build();
+		}
+		Integer refreshUserId = refresh.getUserId();
+		if (refreshUserId == null && MSysConfig.getBooleanValue("REST_MANDATORY_USER_ID_ON_REFRESH", true)) {
+			return Response.status(Status.UNAUTHORIZED)
+					.entity(new ErrorBuilder().status(Status.UNAUTHORIZED).title("Authenticate error").append("No userId provided").build().toString())
+					.build();
+		}
+
+		if (MRefreshToken.isParent(refreshToken)) {
+			Env.setContext(Env.getCtx(), Env.AD_CLIENT_ID, 0);
+			MRefreshToken.breachDetected(refreshToken);
+			return Response.status(Status.UNAUTHORIZED)
+					.entity(new ErrorBuilder().status(Status.UNAUTHORIZED).title("Authenticate error").append("Invalid refresh token").build().toString())
+					.build();
+		}
+
 		Algorithm algorithm = Algorithm.HMAC512(TokenUtils.getTokenSecret());
 		JWTVerifier verifier = JWT.require(algorithm)
 		        .withIssuer(TokenUtils.getTokenIssuer())
 		        .build(); //Reusable verifier instance
 
-		// Verify the refresh token (expiration, signature)
+		// Verify the refresh token (signature)
 		try {
 			verifier.verify(refreshToken);
 		} catch (JWTVerificationException e) {
@@ -519,12 +830,24 @@ public class AuthServiceImpl implements AuthService {
 		}
 
 		// get the auth token from the refresh token
-		String authToken = MRefreshToken.getAuthToken(refreshToken);
-		if (Util.isEmpty(authToken)) {
+		MRefreshToken refreshTokenInDB = MRefreshToken.getValidForRefresh(refreshToken);
+		if (refreshTokenInDB == null) {
 			return Response.status(Status.UNAUTHORIZED)
 					.entity(new ErrorBuilder().status(Status.UNAUTHORIZED).title("Authenticate error").append("Invalid refresh token").build().toString())
 					.build();
 		}
+		if (refreshClientId != null && refreshTokenInDB.getAD_Client_ID() != refreshClientId) {
+			return Response.status(Status.UNAUTHORIZED)
+					.entity(new ErrorBuilder().status(Status.UNAUTHORIZED).title("Authenticate error").append("Invalid refresh token").build().toString())
+					.build();
+		}
+		if (refreshUserId != null && refreshTokenInDB.getCreatedBy() != refreshUserId) {
+			return Response.status(Status.UNAUTHORIZED)
+					.entity(new ErrorBuilder().status(Status.UNAUTHORIZED).title("Authenticate error").append("Invalid refresh token").build().toString())
+					.build();
+		}
+
+		String authToken = refreshTokenInDB.getToken();
 
 		JWTVerifier decoder = JWT.require(algorithm)
 		        .withIssuer(TokenUtils.getTokenIssuer())
@@ -577,8 +900,7 @@ public class AuthServiceImpl implements AuthService {
 
 		JsonObject responseNode = new JsonObject();
 		Builder builder = JWT.create().withSubject(userName);
-		builder.withClaim(LoginClaims.AD_Client_ID.name(), clientId);
-		Env.setContext(Env.getCtx(), Env.AD_CLIENT_ID, clientId);
+		addClientIdClaim(builder, clientId);
 		builder.withClaim(LoginClaims.AD_User_ID.name(), userId);
 		builder.withClaim(LoginClaims.AD_Role_ID.name(), roleId);
 		builder.withClaim(LoginClaims.AD_Org_ID.name(), orgId);
@@ -587,12 +909,11 @@ public class AuthServiceImpl implements AuthService {
 		builder.withClaim(LoginClaims.AD_Language.name(), defaultLanguage);
 		builder.withClaim(LoginClaims.AD_Session_ID.name(), sessionId);
 
-		Timestamp expiresAt = TokenUtils.getTokenExpiresAt();
-		builder.withIssuer(TokenUtils.getTokenIssuer()).withExpiresAt(expiresAt).withKeyId(TokenUtils.getTokenKeyId());
+		addIssuerAndExpiresAt(builder);
 		try {
 			String token = builder.sign(Algorithm.HMAC512(TokenUtils.getTokenSecret()));
 			responseNode.addProperty("token", token);
-			responseNode.addProperty("refresh_token", generateRefreshToken(token, refreshToken));
+			responseNode.addProperty("refresh_token", generateRefreshToken(token, refreshToken, null));
 		} catch (IllegalArgumentException | JWTCreationException e) {
 			e.printStackTrace();
 			return Response.status(Status.BAD_REQUEST).build();
@@ -605,19 +926,31 @@ public class AuthServiceImpl implements AuthService {
 	 * @param previousRefreshToken 
 	 * @return
 	 */
-	private String generateRefreshToken(String token, String previousRefreshToken) {
-		String uuidJWT = UUID.randomUUID().toString();
-		Builder builder = JWT.create().withJWTId(uuidJWT);
-
-		Timestamp expiresAt = TokenUtils.getRefreshTokenExpiresAt();
-		builder.withIssuer(TokenUtils.getTokenIssuer()).withExpiresAt(expiresAt).withKeyId(TokenUtils.getTokenKeyId());
+	private String generateRefreshToken(String token, String previousRefreshToken, Timestamp absoluteExpiresAt) {
+		SecureRandom secureRandom = new SecureRandom();
+		byte[] randomBytes = new byte[32];
+        secureRandom.nextBytes(randomBytes);
+        StringBuilder hexString = new StringBuilder();
+        for (byte b : randomBytes)
+            hexString.append(String.format("%02x", b));
+		Builder builder = JWT.create().withJWTId(hexString.toString());
+		Timestamp inactiveExpiresAt = TokenUtils.getRefreshTokenExpiresAt();
+		builder.withIssuer(TokenUtils.getTokenIssuer()).withKeyId(TokenUtils.getTokenKeyId());
 		String refreshToken = builder.sign(Algorithm.HMAC512(TokenUtils.getTokenSecret()));
 
 		// persist in database
-		MRefreshToken refreshTokenInDB = new MRefreshToken(token, refreshToken, expiresAt);
+		MRefreshToken refreshTokenInDB = new MRefreshToken(Env.getCtx(), PO.UUID_NEW_RECORD, null);
+		refreshTokenInDB.setToken(token);
+		refreshTokenInDB.setRefreshToken(refreshToken);
+		refreshTokenInDB.setParentToken(previousRefreshToken);
+		refreshTokenInDB.setExpiresAt(inactiveExpiresAt);
+		refreshTokenInDB.setAbsoluteExpiresAt(absoluteExpiresAt);
+		if (previousRefreshToken != null && absoluteExpiresAt == null) {
+			MRefreshToken prt = MRefreshToken.get(previousRefreshToken);
+			if (prt != null)
+				refreshTokenInDB.setAbsoluteExpiresAt(prt.getAbsoluteExpiresAt());
+		}
 		refreshTokenInDB.save();
-		if (previousRefreshToken != null)
-			MRefreshToken.deleteRefreshToken(previousRefreshToken);
 
 		return refreshToken;
 	}
@@ -628,6 +961,15 @@ public class AuthServiceImpl implements AuthService {
 	@Override
 	public Response tokenLogout(LogoutParameters logout) {
 		String token = logout.getToken();
+		
+		// check if this is an oAuth/OIDC token
+		if (MOIDCService.revokeToken(token)) {
+			JsonObject okResponse = new JsonObject();
+			okResponse.addProperty("summary", "OK");
+			
+			return Response.ok(okResponse.toString()).build();
+		}
+		
 		Algorithm algorithm = Algorithm.HMAC512(TokenUtils.getTokenSecret());
 		JWTVerifier verifier = JWT.require(algorithm)
 		        .withIssuer(TokenUtils.getTokenIssuer())
@@ -660,14 +1002,126 @@ public class AuthServiceImpl implements AuthService {
 		}
 		Env.setContext(Env.getCtx(), Env.AD_SESSION_ID, sessionId);
 		MSession session = new MSession(Env.getCtx(), sessionId, null);
+		session.setWebSession(session.getWebSession() + "-logout");
 		session.logout();
+		RestUtils.removeSavedCtx(sessionId);
 
-		MRefreshToken.deleteToken(token);
+		MRefreshToken.logout(token);
 
 		JsonObject okResponse = new JsonObject();
 		okResponse.addProperty("summary", "OK");
 		
 		return Response.ok(okResponse.toString()).build();
+	}
+	
+	/* (non-Javadoc)
+	 * @see com.trekglobal.idempiere.rest.api.v1.auth.AuthService#requestPasswordReset(PasswordResetRequest)
+	 */
+	@Override
+	public Response requestPasswordReset(PasswordResetRequest request) {
+		if (request == null || Util.isEmpty(request.getEmail(), true))
+			return passwordResetBadRequest(Msg.getMsg(Env.getCtx(), "FillMandatory") + " " + Msg.getMsg(Env.getCtx(), "EMail"));
+		ensureResetContext();
+		IPasswordResetService service = Core.getPasswordResetService();
+		try {
+			// client 0: the caller is pre-login and does not know the tenant (mirrors the ZK panel)
+			service.requestReset(request.getEmail(), 0, request.getLanguage() != null ? request.getLanguage() : null);
+		} catch (AdempiereException e) {
+			// the only enumeration-safe failure to surface is the rate limit, which the service
+			// raises for registered and unknown emails alike (via the in-memory decoy)
+			if (Msg.getMsg(Env.getCtx(), "PasswordResetTooManyRequests").equals(e.getLocalizedMessage())) {
+				// ErrorBuilder.status() only accepts the JAX-RS Status enum (no 429), so the numeric
+				// code is carried by the HTTP response only; the body keeps title + detail
+				return Response.status(SC_TOO_MANY_REQUESTS)
+						.entity(new ErrorBuilder()
+								.title("Password reset error").append(e.getLocalizedMessage()).build().toString())
+						.build();
+			}
+			// any other failure (e.g. mail send error) is reachable only for a real address, so it
+			// would leak account existence - swallow it to the same neutral response, logging server-side
+			if (log.isLoggable(Level.WARNING)) log.log(Level.WARNING, "Password reset request failed", e);
+		}
+		// always neutral: identical response whether or not the account exists
+		JsonObject json = new JsonObject();
+		json.addProperty("summary", Msg.getMsg(Env.getCtx(), "PasswordResetCodeSent"));
+		return Response.ok(json.toString()).build();
+	}
+
+	/* (non-Javadoc)
+	 * @see com.trekglobal.idempiere.rest.api.v1.auth.AuthService#verifyPasswordResetCode(PasswordResetVerification)
+	 */
+	@Override
+	public Response verifyPasswordResetCode(PasswordResetVerification verification) {
+		if (verification == null || Util.isEmpty(verification.getEmail(), true)
+				|| Util.isEmpty(verification.getCode(), true))
+			return passwordResetBadRequest(Msg.getMsg(Env.getCtx(), "FillMandatory"));
+		ensureResetContext();
+		IPasswordResetService service = Core.getPasswordResetService();
+		try {
+			String verifiedToken = service.verifyCode(verification.getEmail(), verification.getCode());
+			JsonObject json = new JsonObject();
+			json.addProperty("verifiedToken", verifiedToken);
+			return Response.ok(json.toString()).build();
+		} catch (AdempiereException e) {
+			// single status/body for every failure (invalid / expired / attempts exceeded); the service
+			// already equalizes the messages so this cannot distinguish registered from unknown emails
+			return passwordResetError(e);
+		}
+	}
+
+	/* (non-Javadoc)
+	 * @see com.trekglobal.idempiere.rest.api.v1.auth.AuthService#completePasswordReset(PasswordResetCompletion)
+	 */
+	@Override
+	public Response completePasswordReset(PasswordResetCompletion completion) {
+		if (completion == null || Util.isEmpty(completion.getVerifiedToken(), true)
+				|| Util.isEmpty(completion.getNewPassword(), false))
+			return passwordResetBadRequest(Msg.getMsg(Env.getCtx(), "FillMandatory") + " " + Msg.getMsg(Env.getCtx(), "New Password"));
+		ensureResetContext();
+		IPasswordResetService service = Core.getPasswordResetService();
+		try {
+			service.completeReset(completion.getVerifiedToken(), completion.getNewPassword());
+			JsonObject json = new JsonObject();
+			json.addProperty("summary", Msg.getMsg(Env.getCtx(), "PasswordResetSuccess"));
+			return Response.ok(json.toString()).build();
+		} catch (AdempiereException e) {
+			// invalid/expired token, or password-policy violation (e.g. NewPasswordMustDiffer)
+			return passwordResetError(e);
+		}
+	}
+
+	/**
+	 * The password-reset endpoints are unauthenticated, so {@code RequestFilter} leaves the thread
+	 * context empty. Seed a minimal System (client 0) context so the reset token PO saves have a valid
+	 * context (otherwise {@code PO.checkValidContext} throws "Context lost"). This mirrors the ZK login
+	 * panel, which also drives the reset under client 0 at the login screen.
+	 */
+	private void ensureResetContext() {
+		Env.setContext(Env.getCtx(), Env.AD_CLIENT_ID, 0);
+		Env.setContext(Env.getCtx(), Env.AD_ORG_ID, 0);
+	}
+
+	/**
+	 * @param e the reset failure
+	 * @return a uniform 400 error carrying the (already enumeration-safe) message
+	 */
+	private Response passwordResetError(AdempiereException e) {
+		return passwordResetBadRequest(e.getLocalizedMessage());
+	}
+
+	/**
+	 * @param detail human-readable error detail
+	 * @return a uniform 400 Bad Request with the standard error envelope
+	 */
+	private Response passwordResetBadRequest(String detail) {
+		return Response.status(Status.BAD_REQUEST)
+				.entity(new ErrorBuilder().status(Status.BAD_REQUEST)
+						.title("Password reset error").append(detail).build().toString())
+				.build();
+	}
+
+	public void setRequest(HttpServletRequest request) {
+	    this.request = request;
 	}
 
 }
